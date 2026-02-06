@@ -12,3 +12,5 @@ toutiao_mcp_server
 ttbot-test
 
 data/cookies.json
+
+.DS_Store
