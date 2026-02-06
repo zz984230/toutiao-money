@@ -1,0 +1,25 @@
+# 头条热点自动评论助手配置文件
+
+# Playwright配置
+playwright:
+  headless: false  # 首次使用建议设为false，可以看到浏览器操作
+  slow_mo: 500     # 慢动作模式(ms)，便于调试，生产环境可设为0
+  cookies_file: data/cookies.json
+
+# 行为配置
+behavior:
+  confirmation_mode: true      # 交互确认开关
+  max_comments_per_run: 5      # 每次最多评论数
+  min_read_count: 1000         # 最低阅读量阈值
+  comment_interval: 30         # 评论间隔(秒)
+
+# 评论风格
+style:
+  length: "50-100字"
+  stance: "理性批判"            # 科技乐观/保守谨慎等
+  emotion_level: "medium"      # low/medium/high
+
+# 头条账号Cookie（可选）
+# 从浏览器开发者工具中复制Cookie
+toutiao:
+  cookies: ""  # 粘贴Cookie字符串，格式：key1=value1; key2=value2
