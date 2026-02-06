@@ -315,7 +315,7 @@ class ToutiaoClient:
         return await self.login(username, password)
 
     async def get_hot_news(self, limit: int = 20) -> List[Dict]:
-        """获取热点新闻"""
+        """获取热点新闻（过滤已评论的文章）"""
         try:
             await self.page.goto('https://www.toutiao.com/', timeout=30000)
             await asyncio.sleep(3)  # 等待页面渲染
@@ -335,7 +335,7 @@ class ToutiaoClient:
                 if not links:
                     continue
 
-                for link in links[:limit * 2]:
+                for link in links[:limit * 3]:  # 多抓取一些，因为过滤后可能不足
                     try:
                         url = await link.get_attribute('href')
                         if url and ('/group/' in url or '/article/' in url):
@@ -354,12 +354,31 @@ class ToutiaoClient:
                                         'article_id': article_id,
                                         'url': url
                                     })
-                                    if len(news_items) >= limit:
-                                        return news_items
+                                    if len(news_items) >= limit * 2:
+                                        break
                     except Exception:
                         continue
 
-            return news_items
+                if len(news_items) >= limit * 2:
+                    break
+
+            # 过滤已评论的文章
+            from .storage import storage
+            filtered_items = []
+            seen_ids = set()
+
+            for item in news_items:
+                article_id = item['article_id']
+                if article_id in seen_ids:
+                    continue
+                seen_ids.add(article_id)
+
+                if not storage.is_commented(article_id):
+                    filtered_items.append(item)
+                    if len(filtered_items) >= limit:
+                        break
+
+            return filtered_items
 
         except Exception as e:
             print(f"获取热点新闻失败: {e}")

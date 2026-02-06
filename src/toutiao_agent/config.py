@@ -36,6 +36,11 @@ DEFAULT_CONFIG = {
     "toutiao": {
         "cookies": "",  # 从浏览器复制的Cookie字符串
     },
+
+    # 存储配置
+    "storage": {
+        "db_file": "data/comments.db",  # SQLite数据库路径
+    },
 }
 
 
@@ -95,6 +100,10 @@ class Config:
     @property
     def toutiao(self):
         return self.config['toutiao']
+
+    @property
+    def storage(self):
+        return self.config['storage']
 
     def get_toutiao_credentials(self) -> tuple[Optional[str], Optional[str]]:
         """获取头条账号凭据（从环境变量）"""

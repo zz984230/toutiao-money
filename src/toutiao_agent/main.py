@@ -41,10 +41,13 @@ class ToutiaoAgent:
         prompt = generator.generate_prompt(title, abstract)
         return prompt
 
-    async def post_comment(self, article_id: str, content: str):
+    async def post_comment(self, article_id: str, content: str, title: str = "", url: str = ""):
         """发表评论"""
         result = await self.client.post_comment(article_id, content)
         if result.get('success'):
+            # 记录到数据库
+            from .storage import storage
+            storage.add_comment(article_id, title, url, content)
             print(f"✅ 评论成功! 文章ID: {article_id}")
         else:
             print(f"❌ 评论失败: {result.get('error', '未知错误')}")
@@ -140,7 +143,7 @@ def start_cmd(count):
                         continue
 
                     # 发表评论
-                    await agent.post_comment(news['article_id'], comment_text)
+                    await agent.post_comment(news['article_id'], comment_text, news['title'], news.get('url', ''))
 
                     # 间隔
                     if i < count:
@@ -162,6 +165,36 @@ def config_show():
     """显示当前配置"""
     import yaml
     click.echo(yaml.dump(config.config, allow_unicode=True))
+
+
+@cli.command('history')
+@click.option('--limit', default=20, help='显示条数')
+def history_cmd(limit):
+    """查看评论历史"""
+    from .storage import storage
+
+    records = storage.get_history(limit)
+    if not records:
+        click.echo("暂无评论记录")
+        return
+
+    click.echo(f"\n最近 {len(records)} 条评论:\n")
+    for r in records:
+        click.echo(f"📅 {r['created_at']}")
+        click.echo(f"   文章: {r['title'][:50]}...")
+        click.echo(f"   评论: {r['content'][:50]}...")
+        click.echo(f"   ID: {r['article_id']}\n")
+
+
+@cli.command('stats')
+def stats_cmd():
+    """查看评论统计"""
+    from .storage import storage
+
+    count = storage.get_comment_count()
+    click.echo(f"\n📊 评论统计:")
+    click.echo(f"   总评论数: {count}")
+    click.echo(f"   数据库: {config.storage.get('db_file')}\n")
 
 
 if __name__ == '__main__':
