@@ -77,6 +77,57 @@ class ToutiaoClient:
             print(f"检查登录状态失败: {e}")
             return False
 
+    async def _check_login_success(self) -> bool:
+        """检查登录是否真正成功（通过Cookie和页面元素）"""
+        # 1. 检查是否有登录相关的 Cookie（主要指标）
+        cookies = await self.context.cookies()
+        login_cookie_names = ['sessionid', 'sid_tt', 'uid_tt', 'sessionid_sig', 'sid_guard']
+
+        has_login_cookie = any(
+            any(c.get('name') == name for c in cookies)
+            for name in login_cookie_names
+        )
+
+        if has_login_cookie:
+            print(f"  ✓ 检测到登录 Cookie")
+            return True
+
+        # 2. 检查 localStorage 中的登录数据（辅助指标）
+        local_storage = await self.page.evaluate('''() => {
+            return {
+                hasUserId: !!localStorage.getItem('SLARDARweb_login_sdk'),
+                hasPassportData: !!Object.keys(localStorage).filter(k => k.includes('passport')).length
+            };
+        }''')
+
+        if local_storage['hasUserId']:
+            print(f"  ✓ 检测到 localStorage 登录数据")
+
+            # localStorage 有数据，但等待 Cookie 更新
+            await asyncio.sleep(2)
+            cookies = await self.context.cookies()
+            if any(any(c.get('name') == name for c in cookies) for name in login_cookie_names):
+                print(f"  ✓ Cookie 已更新")
+                return True
+
+        # 3. 检查页面状态（备用）
+        page_state = await self.page.evaluate('''() => {
+            const loginBtn = document.querySelector('.login-button');
+            const loginLink = Array.from(document.querySelectorAll('a')).find(a => a.textContent.includes('登录'));
+            return {
+                loginBtnOffsetWidth: loginBtn ? loginBtn.offsetWidth : null,
+                loginLinkVisible: loginLink ? loginLink.offsetWidth > 0 : false
+            };
+        }''')
+
+        # 如果登录按钮仍然是可点击的（offsetWidth > 0），说明未登录
+        if page_state['loginLinkVisible']:
+            print(f"  ✗ 登录链接仍然可见")
+            return False
+
+        print(f"  登录状态未确认")
+        return False
+
     async def load_cookies_from_string(self, cookies_str: str):
         """从Cookie字符串加载Cookie"""
         cookies_file = Path(config.playwright.get('cookies_file'))
@@ -273,24 +324,24 @@ class ToutiaoClient:
             print("  等待登录结果...")
             await asyncio.sleep(5)
 
-            # 检查是否登录成功
-            current_url = self.page.url
-            if 'auth' not in current_url:
+            # 检查是否登录成功（使用 Cookie 和页面元素检查）
+            if await self._check_login_success():
                 print("  ✅ 登录成功!")
                 return True
             else:
-                print(f"  当前仍在登录页: {current_url}")
+                current_url = self.page.url
+                print(f"  当前页面: {current_url}")
                 print("  可能需要验证码，请在浏览器中完成...")
 
                 # 等待用户手动完成（非headless模式）
                 print("  等待30秒，请在浏览器中完成验证...")
                 for i in range(30):
                     await asyncio.sleep(1)
-                    current_url = self.page.url
-                    if 'auth' not in current_url:
+                    if await self._check_login_success():
                         print("  ✅ 登录成功!")
                         return True
 
+                print("  ❌ 登录超时，验证未完成")
                 return False
 
         except Exception as e:
