@@ -16,6 +16,10 @@ uv sync
 # 安装 Playwright 浏览器
 uv run playwright install chromium
 
+# 配置登录（推荐使用 Cookie 方式）
+# 1. 在浏览器登录头条
+# 2. 复制 sessionid, sid_tt, uid_tt 到 data/cookies.json
+
 # 运行命令
 uv run toutiao-agent hot-news --limit 20
 uv run toutiao-agent comment <article_id> "<评论内容>"
@@ -43,40 +47,87 @@ uv run toutiao-agent start --count 5
 | `stats` | 查看评论统计 | `uv run toutiao-agent stats` |
 | `config-show` | 显示当前配置 | `uv run toutiao-agent config-show` |
 
-## 关键实现细节
+## 登录方式（已验证）
 
-### 登录流程（重要）
+### 方式 1: Cookie 登录（推荐）
 
-登录涉及多个特殊操作，必须按顺序执行：
+在浏览器中登录后，复制关键 Cookie 到 `data/cookies.json`：
 
-1. **主登录按钮** (`.login-button`): CSS 尺寸为 0，**必须用 JavaScript 点击**
-   ```python
-   await page.evaluate('''() => {
-       document.querySelector('.login-button').click();
-   }''')
-   ```
+```json
+{
+  "cookies": [
+    {
+      "name": "sessionid",
+      "value": "你的sessionid值",
+      "domain": ".toutiao.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "sid_tt",
+      "value": "你的sid_tt值",
+      "domain": ".toutiao.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "uid_tt",
+      "value": "你的uid_tt值",
+      "domain": ".toutiao.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
+  "origins": []
+}
+```
 
-2. **等待 5 秒**：让弹窗完全加载
+**必需的登录 Cookie**:
+- `sessionid` - 登录会话 ID
+- `sid_tt` - 用户会话 Token
+- `uid_tt` - 用户 ID
 
-3. **账密登录选项** (`[aria-label="账密登录"]`): 需要 `click(force=True)`
-   ```python
-   btn = await page.query_selector('[aria-label="账密登录"]')
-   await btn.click(force=True)
-   ```
+### 方式 2: 账密登录（需手动验证）
 
-4. **填写表单**：输入框选择器
-   - 手机号: `input[placeholder="手机号/邮箱"]`
-   - 密码: `input[type="password"]`
+账密登录后需要短信/滑块验证，建议在非 headless 模式下手动完成。
 
-完整实现见 `src/toutiao_agent/toutiao_client.py:117-298`
+登录关键步骤：
+1. 主登录按钮 (`.login-button`): CSS 尺寸为 0，必须用 JavaScript 点击
+2. 等待 5 秒让弹窗加载
+3. 点击账密登录选项 (`[aria-label="账密登录"]`)
+4. 填写表单后点击登录
+5. 等待手动完成验证
 
-### Cookie 管理
+## 评论发表流程（已验证）
 
-- Cookie 保存在 `data/cookies.json`
-- 每次运行时自动加载已保存的 Cookie
-- 关闭时自动保存当前 Cookie 状态
+头条评论使用 `contenteditable` 输入框：
 
-### 评论存储
+1. **导航到文章**: 使用 `/article/{id}/` 格式
+2. **滚动到评论区**: `window.scrollTo(0, document.body.scrollHeight)`
+3. **点击输入区域**: `.ttp-comment-input`
+4. **填写内容**: `[contenteditable="true"]`
+5. **发送**: 按 `Enter` 键
+
+完整实现见 `src/toutiao_agent/toutiao_client.py:464-520`
+
+## 登录状态检测
+
+`_check_login_success()` 方法使用多重指标：
+
+1. **主要**: 检查登录 Cookie (sessionid, sid_tt, uid_tt)
+2. **辅助**: 检查 localStorage (SLARDARweb_login_sdk)
+3. **备用**: 检查页面登录链接状态
+
+## 评论存储
 
 SQLite 数据库 (`data/comments.db`) 表结构：
 
@@ -93,10 +144,11 @@ CREATE TABLE comments (
 
 存储在 `ToutiaoAgent.post_comment()` 成功后自动调用。
 
-### 配置管理
+## 配置管理
 
 - **主配置**: `config.yaml`
 - **敏感数据**: `.env` (TOUTIAO_USERNAME, TOUTIAO_PASSWORD)
+- **Cookie**: `data/cookies.json`
 - **确认模式**: `behavior.confirmation_mode` 控制交互式/自动执行
 
 ## 详细参考
@@ -107,7 +159,8 @@ CREATE TABLE comments (
 
 ## 开发注意事项
 
-1. Playwright 默认非 headless 模式，便于手动处理验证码
-2. 登录按钮的特殊 CSS 隐藏需要 JavaScript 点击
-3. 评论发布前会检查 `storage.is_commented()` 避免重复
-4. 所有评论成功后都会记录到 SQLite
+1. **Cookie 登录**是最可靠的方式
+2. 评论输入使用 `contenteditable` 非 `textarea`
+3. 发送评论用 `Enter` 键，非提交按钮
+4. 登录状态检测用多重指标，非单一 URL 检查
+5. 所有评论成功后都会记录到 SQLite
