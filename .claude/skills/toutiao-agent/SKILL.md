@@ -115,7 +115,20 @@ uv run toutiao-agent start --count 5
 2. **滚动到评论区**: `window.scrollTo(0, document.body.scrollHeight)`
 3. **点击输入区域**: `.ttp-comment-input`
 4. **填写内容**: `[contenteditable="true"]`
-5. **发送**: 按 `Enter` 键
+5. **用户确认**: 在发送前必须和用户确认评论内容
+6. **发送**: 用户确认后按 `Enter` 键
+
+**确认步骤**:
+```python
+# 显示评论内容并等待用户确认
+print(f"\n即将发表评论:")
+print(f"  文章: {title}")
+print(f"  内容: {content}")
+confirm = input("确认发送? (y/n): ")
+if confirm.lower() == 'y':
+    # 发送评论
+    await editable.press('Enter')
+```
 
 完整实现见 `src/toutiao_agent/toutiao_client.py:464-520`
 
