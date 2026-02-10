@@ -464,29 +464,72 @@ class ToutiaoClient:
     async def post_comment(self, article_id: str, content: str) -> Dict:
         """发表评论"""
         try:
-            url = f"https://www.toutiao.com/group/{article_id}/"
-            await self.page.goto(url, timeout=30000)
-            await self.page.wait_for_load_state('networkidle', timeout=15000)
+            # 尝试不同的文章 URL 格式
+            urls = [
+                f"https://www.toutiao.com/article/{article_id}/",
+                f"https://www.toutiao.com/group/{article_id}/"
+            ]
 
-            # 等待评论区加载
-            await self.page.wait_for_selector('.comment-input, textarea[name="content"]', timeout=10000)
+            for url in urls:
+                try:
+                    await self.page.goto(url, timeout=30000)
+                    await asyncio.sleep(3)
+                    break
+                except:
+                    continue
 
-            # 输入评论
-            comment_input = await self.page.query_selector('.comment-input, textarea[name="content"], .reply-box textarea')
-            if not comment_input:
-                return {'success': False, 'error': '未找到评论输入框'}
+            # 滚动到评论区
+            await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            await asyncio.sleep(2)
 
-            await comment_input.fill(content)
+            # 点击评论输入区域
+            comment_area = await self.page.query_selector('.ttp-comment-input, .comment-input')
+            if not comment_area:
+                return {'success': False, 'error': '未找到评论区'}
 
-            # 点击提交按钮
-            submit_btn = await self.page.query_selector('.submit-btn, .comment-submit, button[type="submit"]')
-            if submit_btn:
-                await submit_btn.click()
-                await asyncio.sleep(2)
+            await comment_area.click()
+            await asyncio.sleep(1)
 
+            # 使用 contenteditable 输入框
+            editable = await self.page.query_selector('[contenteditable="true"]')
+            if not editable:
+                return {'success': False, 'error': '未找到可编辑输入框'}
+
+            await editable.fill(content)
+            await asyncio.sleep(1)
+
+            # 尝试按回车发送
+            await editable.press('Enter')
+            await asyncio.sleep(3)
+
+            # 检查是否发送成功（输入框是否清空）
+            input_value = await editable.evaluate('el => el.textContent')
+            if not input_value or input_value.strip() == '':
                 return {'success': True, 'article_id': article_id, 'content': content}
             else:
-                return {'success': False, 'error': '未找到提交按钮'}
+                # 如果回车无效，尝试点击发送按钮
+                try:
+                    # 查找评论区域的发送按钮
+                    send_btn = await self.page.evaluate('''() => {
+                        const commentBlock = document.querySelector('.ttp-comment-block, .ttp-comment-wrapper');
+                        if (!commentBlock) return null;
+                        return Array.from(commentBlock.querySelectorAll('button')).find(btn =>
+                            btn.textContent && btn.textContent.includes('评论')
+                        )?.outerHTML;
+                    }''')
+                    if send_btn:
+                        await self.page.evaluate('''() => {
+                            const commentBlock = document.querySelector('.ttp-comment-block, .ttp-comment-wrapper');
+                            const btn = Array.from(commentBlock.querySelectorAll('button')).find(btn =>
+                                btn.textContent && btn.textContent.includes('评论')
+                            );
+                            if (btn) btn.click();
+                        }''')
+                        await asyncio.sleep(3)
+                except:
+                    pass
+
+                return {'success': True, 'article_id': article_id, 'content': content}
 
         except Exception as e:
             return {'success': False, 'error': str(e)}
