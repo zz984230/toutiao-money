@@ -63,18 +63,15 @@ class ToutiaoAgent:
         images: Optional[list] = None,
         topic: Optional[str] = None
     ):
-        """发布微头条（通过 MCP 服务器）"""
-        if not config.mcp.get('enabled', True):
-            print("❌ MCP 功能未启用，请检查配置")
-            return {'success': False, 'error': 'MCP 未启用'}
-
+        """发布微头条（直接使用 Playwright）"""
         print(f"\n正在发布微头条...")
         print(f"内容: {content[:100]}{'...' if len(content) > 100 else ''}")
 
-        result = await mcp_client.publish_micro_post(
+        # 使用客户端的 Playwright 方法发布
+        result = await self.client.publish_micro_headline(
             content=content,
-            images=images,
-            topic=topic
+            topic=topic,
+            images=images
         )
 
         if result.get('success'):
@@ -91,7 +88,7 @@ class ToutiaoAgent:
             )
             print(f"✅ 微头条发布成功!")
         else:
-            print(f"❌ 微头条发布失败: {result.get('error', '未知错误')}")
+            print(f"❌ 微头条发布失败: {result.get('message', result.get('error', '未知错误'))}")
 
         return result
 
@@ -274,10 +271,7 @@ def post_micro_headline_cmd(content, topic, activity_id, activity_title):
     async def run():
         agent = ToutiaoAgent()
         try:
-            # 检查 MCP 登录状态
-            login_ok = await agent.check_mcp_login()
-            if not login_ok:
-                return
+            await agent.initialize()
 
             # 确认模式
             if config.behavior.get('confirmation_mode', True):
@@ -435,11 +429,7 @@ def start_activities_cmd(count):
     async def run():
         agent = ToutiaoAgent()
         try:
-            # 检查 MCP 登录状态
-            print("\n检查 MCP 登录状态...")
-            login_ok = await agent.check_mcp_login()
-            if not login_ok:
-                return
+            await agent.initialize()
 
             # 获取活动列表
             print(f"\n正在获取活动列表...")

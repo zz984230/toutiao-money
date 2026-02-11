@@ -534,6 +534,237 @@ class ToutiaoClient:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    async def publish_micro_headline(self, content: str, topic: str = None, images: List[str] = None) -> Dict:
+        """发布微头条"""
+        try:
+            print("正在访问微头条发布页面...")
+            # 使用正确的微头条发布页面 URL
+            await self.page.goto(
+                "https://mp.toutiao.com/profile_v4/weitoutiao/publish",
+                wait_until="networkidle",
+                timeout=60000
+            )
+
+            print(f"当前 URL: {self.page.url}")
+
+            # 检查登录状态
+            if "login" in self.page.url:
+                # 等待一下，可能是页面跳转过程中
+                await asyncio.sleep(3)
+                print(f"等待后 URL: {self.page.url}")
+                if "login" in self.page.url:
+                    return {
+                        "success": False,
+                        "message": "需要重新登录，请更新 Cookie"
+                    }
+
+            # 等待页面加载
+            await asyncio.sleep(5)
+
+            # 尝试使用更全面的方式查找输入框
+            print("正在查找输入框...")
+
+            # 先尝试通过 JavaScript 查找所有可能的输入元素
+            input_info = await self.page.evaluate('''() => {
+                const results = [];
+
+                // 查找所有 contenteditable 元素
+                const editables = document.querySelectorAll('[contenteditable="true"]');
+                editables.forEach((el, idx) => {
+                    const rect = el.getBoundingClientRect();
+                    const computed = window.getComputedStyle(el);
+                    results.push({
+                        type: 'contenteditable',
+                        index: idx,
+                        visible: rect.width > 0 && rect.height > 0,
+                        inViewport: rect.top >= 0 && rect.top <= window.innerHeight,
+                        width: rect.width,
+                        height: rect.height,
+                        top: rect.top,
+                        display: computed.display,
+                        visibility: computed.visibility,
+                        tag: el.tagName,
+                        className: el.className,
+                        id: el.id,
+                        placeholder: el.getAttribute('placeholder') || '',
+                        textContent: el.textContent?.substring(0, 20) || ''
+                    });
+                });
+
+                // 查找 textarea
+                const textareas = document.querySelectorAll('textarea');
+                textareas.forEach((el, idx) => {
+                    const rect = el.getBoundingClientRect();
+                    results.push({
+                        type: 'textarea',
+                        index: idx,
+                        visible: rect.width > 0 && rect.height > 0,
+                        inViewport: rect.top >= 0 && rect.top <= window.innerHeight,
+                        width: rect.width,
+                        height: rect.height,
+                        top: rect.top,
+                        tag: el.tagName,
+                        className: el.className,
+                        id: el.id,
+                        placeholder: el.placeholder || ''
+                    });
+                });
+
+                // 查找 input[type=text]
+                const inputs = document.querySelectorAll('input[type="text"], input:not([type])');
+                inputs.forEach((el, idx) => {
+                    const rect = el.getBoundingClientRect();
+                    results.push({
+                        type: 'input',
+                        index: idx,
+                        visible: rect.width > 0 && rect.height > 0,
+                        inViewport: rect.top >= 0 && rect.top <= window.innerHeight,
+                        width: rect.width,
+                        height: rect.height,
+                        top: rect.top,
+                        tag: el.tagName,
+                        className: el.className,
+                        id: el.id,
+                        placeholder: el.placeholder || ''
+                    });
+                });
+
+                return results;
+            }''')
+
+            print(f"找到的可输入元素 ({len(input_info)} 个):")
+            for elem in input_info[:10]:  # 只打印前10个
+                print(f"  - {elem}")
+
+            # 根据查找结果选择合适的元素
+            editable = None
+            # 优先选择可见的 contenteditable 元素
+            visible_elements = [e for e in input_info if e.get('visible') and e.get('inViewport')]
+            if not visible_elements:
+                visible_elements = [e for e in input_info if e.get('visible')]
+
+            if visible_elements:
+                # 优先选择 contenteditable
+                for elem_info in visible_elements:
+                    if elem_info['type'] == 'contenteditable':
+                        editable = self.page.locator('[contenteditable="true"]').nth(elem_info['index'])
+                        print(f"\n选择 contenteditable[{elem_info['index']}]: {elem_info}")
+                        break
+                    elif elem_info['type'] == 'textarea':
+                        editable = self.page.locator('textarea').nth(elem_info['index'])
+                        print(f"\n选择 textarea[{elem_info['index']}]: {elem_info}")
+                        break
+
+            if not editable:
+                # 保存截图和 HTML 用于调试
+                await self.page.screenshot(path="data/debug/weic_page.png", full_page=True)
+                html_content = await self.page.content()
+                with open("data/debug/weic_page.html", "w", encoding="utf-8") as f:
+                    f.write(html_content)
+                print("\n未找到可见的输入框，已保存调试文件")
+                return {
+                    "success": False,
+                    "message": "未找到输入框，已保存截图和 HTML 到 data/debug/"
+                }
+
+            # 点击输入框并输入内容
+            print("\n点击输入框...")
+            await editable.click()
+            await asyncio.sleep(1)
+
+            print("输入内容...")
+            await editable.fill(content)
+            await asyncio.sleep(2)
+
+            # 查找并点击发布按钮
+            print("查找发布按钮...")
+            publish_button = None
+
+            # 通过 JavaScript 查找发布按钮
+            button_info = await self.page.evaluate('''() => {
+                const buttons = Array.from(document.querySelectorAll('button, [role="button"], .btn'));
+                const results = [];
+                buttons.forEach(btn => {
+                    const text = btn.textContent?.trim() || '';
+                    const rect = btn.getBoundingClientRect();
+                    if (text.includes('发布') || text.includes('发送') || text.includes('提交')) {
+                        results.push({
+                            text: text,
+                            visible: rect.width > 0 && rect.height > 0,
+                            className: btn.className,
+                            id: btn.id
+                        });
+                    }
+                });
+                return results;
+            }''')
+
+            print(f"找到的发布按钮: {button_info}")
+
+            button_selectors = [
+                'button:has-text("发布")',
+                'button.btn-primary',
+                '[class*="publish"]',
+                'button.publish-btn',
+                '.send-button',
+            ]
+
+            for selector in button_selectors:
+                try:
+                    btn = self.page.locator(selector).first
+                    if await btn.count() > 0 and await btn.is_visible():
+                        publish_button = btn
+                        print(f"找到发布按钮: {selector}")
+                        break
+                except Exception:
+                    continue
+
+            if publish_button:
+                await publish_button.click()
+                print("已点击发布按钮")
+            else:
+                # 尝试使用快捷键发布
+                await self.page.keyboard.press("Control+Enter")
+                print("使用 Ctrl+Enter 发布")
+
+            # 等待发布完成
+            await asyncio.sleep(5)
+
+            # 检查是否发布成功
+            current_url = self.page.url
+            if "weitoutiao" not in current_url or "success" in current_url:
+                print("微头条发布成功")
+                return {
+                    "success": True,
+                    "message": "发布成功"
+                }
+            else:
+                # 检查是否有错误提示
+                error_msg = await self.page.evaluate('''() => {
+                    const errorEl = document.querySelector('.error-message, .toast-error, [class*="error"]');
+                    return errorEl ? errorEl.textContent : '';
+                }''')
+                if error_msg:
+                    return {
+                        "success": False,
+                        "message": f"发布失败: {error_msg}"
+                    }
+                # 没有错误信息，可能已发布
+                return {
+                    "success": True,
+                    "message": "发布成功"
+                }
+
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"发布微头条异常: {e}")
+            print(f"错误堆栈: {error_trace}")
+            return {
+                "success": False,
+                "message": f"发布失败: {str(e)}"
+            }
+
 
 # 单例模式
 _client: Optional[ToutiaoClient] = None
