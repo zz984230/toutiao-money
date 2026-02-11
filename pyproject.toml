@@ -9,6 +9,7 @@ dependencies = [
     "playwright>=1.40.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
+    "httpx>=0.24.0",
 ]
 
 [project.scripts]

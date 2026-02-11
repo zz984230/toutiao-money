@@ -41,6 +41,13 @@ DEFAULT_CONFIG = {
     "storage": {
         "db_file": "data/comments.db",  # SQLite数据库路径
     },
+
+    # MCP 服务器配置
+    "mcp": {
+        "server_url": "http://localhost:8003",  # MCP 服务器地址
+        "timeout": 60,                           # 请求超时时间(秒)
+        "enabled": True,                         # 是否启用 MCP 功能
+    },
 }
 
 
@@ -104,6 +111,10 @@ class Config:
     @property
     def storage(self):
         return self.config['storage']
+
+    @property
+    def mcp(self):
+        return self.config['mcp']
 
     def get_toutiao_credentials(self) -> tuple[Optional[str], Optional[str]]:
         """获取头条账号凭据（从环境变量）"""
