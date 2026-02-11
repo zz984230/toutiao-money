@@ -7,7 +7,6 @@ from typing import Optional
 from .config import config
 from .toutiao_client import get_client, close_client, ToutiaoClient
 from .generator import generator
-from .mcp_client import mcp_client
 from .activity_fetcher import activity_fetcher, Activity
 
 
@@ -91,26 +90,6 @@ class ToutiaoAgent:
             print(f"❌ 微头条发布失败: {result.get('message', result.get('error', '未知错误'))}")
 
         return result
-
-    async def check_mcp_login(self) -> bool:
-        """检查 MCP 服务器的登录状态"""
-        if not config.mcp.get('enabled', True):
-            print("❌ MCP 功能未启用")
-            return False
-
-        result = await mcp_client.check_login_status()
-        if result.get('success'):
-            is_logged_in = result.get('is_logged_in', False)
-            if is_logged_in:
-                user_info = result.get('user_info', {})
-                print(f"✅ MCP 已登录: {user_info.get('username', '未知用户')}")
-                return True
-            else:
-                print("⚠️  MCP 未登录，请先登录")
-                return False
-        else:
-            print(f"❌ 检查登录状态失败: {result.get('error', '未知错误')}")
-            return False
 
     async def close(self):
         """关闭客户端"""
@@ -327,53 +306,7 @@ def micro_stats_cmd():
 
     count = storage.get_micro_headline_count()
     click.echo(f"\n📊 微头条统计:")
-    click.echo(f"   总发布数: {count}")
-    click.echo(f"   MCP 服务器: {config.mcp.get('server_url')}\n")
-
-
-@cli.command('mcp-login')
-def mcp_login_cmd():
-    """登录 MCP 服务器"""
-    async def run():
-        # 从环境变量获取账号密码
-        from .config import config
-        username, password = config.get_toutiao_credentials()
-
-        if not username or not password:
-            print("❌ 请在 .env 文件中设置 TOUTIAO_USERNAME 和 TOUTIAO_PASSWORD")
-            return
-
-        print(f"正在登录 MCP 服务器...")
-        result = await mcp_client.login_with_credentials(username, password)
-
-        if result.get('success'):
-            print(f"✅ 登录成功!")
-        else:
-            print(f"❌ 登录失败: {result.get('error', '未知错误')}")
-    asyncio.run(run())
-
-
-@cli.command('mcp-status')
-def mcp_status_cmd():
-    """查看 MCP 服务器状态"""
-    async def run():
-        print(f"\n🔍 MCP 服务器状态:")
-        print(f"   地址: {config.mcp.get('server_url')}")
-        print(f"   启用: {'是' if config.mcp.get('enabled', True) else '否'}")
-
-        result = await mcp_client.check_login_status()
-        if result.get('success'):
-            is_logged_in = result.get('is_logged_in', False)
-            print(f"   连接: ✅ 正常")
-            print(f"   登录: {'✅ 已登录' if is_logged_in else '❌ 未登录'}")
-            if is_logged_in:
-                user_info = result.get('user_info', {})
-                print(f"   用户: {user_info.get('username', '未知')}")
-        else:
-            print(f"   连接: ❌ 失败")
-            print(f"   错误: {result.get('error', '未知错误')}")
-        print()
-    asyncio.run(run())
+    click.echo(f"   总发布数: {count}\n")
 
 
 # ============ 活动相关命令 ============
