@@ -202,7 +202,7 @@ class ToutiaoClient:
                 await self.page.wait_for_selector('[aria-label="账密登录"]', timeout=10000)
             except Exception:
                 print("  ❌ 账密登录选项加载超时")
-                await self.page.screenshot(path="debug_wait_account_login.png")
+                await self.page.screenshot(path="debug/debug_wait_account_login.png")
                 return False
 
             # 查找并点击帐密登录选项
@@ -229,11 +229,11 @@ class ToutiaoClient:
                         print("  ✓ 已点击账密登录 (JavaScript)")
                     else:
                         print("  ❌ 点击账密登录失败")
-                        await self.page.screenshot(path="debug_account_login_failed.png")
+                        await self.page.screenshot(path="debug/debug_account_login_failed.png")
                         return False
             else:
                 print("  ❌ 未找到账密登录选项")
-                await self.page.screenshot(path="debug_no_account_login.png")
+                await self.page.screenshot(path="debug/debug_no_account_login.png")
                 return False
 
             await asyncio.sleep(2)
@@ -265,7 +265,7 @@ class ToutiaoClient:
                 print(f"  ✓ 已填写手机号 ({phone_filled.get('selector')})")
             else:
                 print("  ❌ 未找到手机号输入框")
-                await self.page.screenshot(path="debug_no_phone_input.png")
+                await self.page.screenshot(path="debug/debug_no_phone_input.png")
                 return False
 
             await asyncio.sleep(0.5)
@@ -295,7 +295,7 @@ class ToutiaoClient:
                 print(f"  ✓ 已填写密码 ({password_filled.get('selector')})")
             else:
                 print("  ❌ 未找到密码输入框")
-                await self.page.screenshot(path="debug_no_password_input.png")
+                await self.page.screenshot(path="debug/debug_no_password_input.png")
                 return False
 
             await asyncio.sleep(0.5)
@@ -317,7 +317,7 @@ class ToutiaoClient:
                 print("  ✓ 已点击登录按钮")
             else:
                 print("  ❌ 未找到登录按钮")
-                await self.page.screenshot(path="debug_no_submit_btn.png")
+                await self.page.screenshot(path="debug/debug_no_submit_btn.png")
                 return False
 
             # 等待登录结果
