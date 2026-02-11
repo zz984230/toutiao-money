@@ -8,6 +8,7 @@ from .config import config
 from .toutiao_client import get_client, close_client, ToutiaoClient
 from .generator import generator
 from .mcp_client import mcp_client
+from .activity_fetcher import activity_fetcher, Activity
 
 
 class ToutiaoAgent:
@@ -378,6 +379,160 @@ def mcp_status_cmd():
             print(f"   连接: ❌ 失败")
             print(f"   错误: {result.get('error', '未知错误')}")
         print()
+    asyncio.run(run())
+
+
+# ============ 活动相关命令 ============
+
+@cli.command('activities')
+@click.option('--limit', default=10, help='显示数量')
+@click.option('--category', default='全部', help='分类筛选')
+@click.option('--all', '-a', is_flag=True, help='显示全部活动（包括已参与和已过期）')
+def activities_cmd(limit, category, all):
+    """查看活动列表"""
+    from .storage import storage
+
+    print(f"\n正在获取活动列表...")
+
+    activities = activity_fetcher.fetch_activities(
+        limit=limit,
+        category=category,
+        only_ongoing=not all,
+        only_unparticipated=not all
+    )
+
+    if not activities:
+        print("暂无可用活动")
+        return
+
+    click.echo(f"\n📋 找到 {len(activities)} 个活动:\n")
+
+    for i, activity in enumerate(activities[:limit], 1):
+        click.echo(f"{i}. {activity.title}")
+        click.echo(f"   📖 {activity.introduction}")
+        if activity.hashtag_name:
+            click.echo(f"   🏷️  话题: #{activity.hashtag_name}#")
+        click.echo(f"   ⏰ {activity.activity_time}")
+        click.echo(f"   💰 {activity.activity_reward}")
+        click.echo(f"   👥 {activity.activity_participants} 人参与")
+
+        # 检查是否已参与
+        if storage.is_activity_participated(str(activity.activity_id)):
+            click.echo(f"   ✅ 已参与")
+        else:
+            click.echo(f"   ⭕ 未参与")
+
+        click.echo(f"   🆔 ID: {activity.activity_id}")
+        click.echo()
+
+
+@cli.command('start-activities')
+@click.option('--count', default=5, help='参与活动数量')
+def start_activities_cmd(count):
+    """自动参与活动（生成并发布微头条）"""
+    from .storage import storage
+
+    async def run():
+        agent = ToutiaoAgent()
+        try:
+            # 检查 MCP 登录状态
+            print("\n检查 MCP 登录状态...")
+            login_ok = await agent.check_mcp_login()
+            if not login_ok:
+                return
+
+            # 获取活动列表
+            print(f"\n正在获取活动列表...")
+            activities = activity_fetcher.fetch_activities(
+                limit=count * 2,  # 获取更多以便筛选
+                only_ongoing=True,
+                only_unparticipated=True
+            )
+
+            # 过滤已参与的活动
+            new_activities = [
+                a for a in activities
+                if not storage.is_activity_participated(str(a.activity_id))
+            ]
+
+            if not new_activities:
+                print("暂无新的活动可参与")
+                return
+
+            click.echo(f"\n找到 {len(new_activities)} 个新活动\n")
+
+            # 逐个处理活动
+            for i, activity in enumerate(new_activities[:count], 1):
+                print(f"\n--- 处理第 {i}/{min(count, len(new_activities))} 个活动 ---")
+                print(f"活动: {activity.title}")
+                print(f"介绍: {activity.introduction}")
+
+                # 确认模式
+                if config.behavior.get('confirmation_mode', True):
+                    choice = input(f"\n是否参与此活动? (y/n/s跳过): ").strip().lower()
+                    if choice != 'y':
+                        continue
+
+                # 生成提示词
+                hashtag = activity.get_hashtag() or activity.hashtag_name or ""
+                prompt = f"""请根据以下活动信息生成一条微头条内容：
+
+活动标题: {activity.title}
+活动介绍: {activity.introduction}
+话题标签: #{hashtag}#
+
+要求:
+- 字数: 100-300 字
+- 必须包含话题标签
+- 内容与活动主题相关
+- 积极向上的语气
+- 适当使用 emoji
+
+请直接输出微头条内容。"""
+
+                if config.behavior.get('confirmation_mode', True):
+                    print("\n提示词:")
+                    print(prompt)
+                    print("\n请将上述提示词发送给Claude获取微头条内容，然后输入内容:")
+
+                    content = input("微头条内容: ").strip()
+
+                    if not content:
+                        print("跳过")
+                        continue
+
+                    # 确认发布
+                    print(f"\n即将发布:")
+                    print(f"  内容: {content[:100]}{'...' if len(content) > 100 else ''}")
+                    if hashtag:
+                        print(f"  话题: #{hashtag}#")
+
+                    confirm = input("\n确认发布? (y/n): ").strip().lower()
+                    if confirm != 'y':
+                        print("已取消")
+                        continue
+
+                    # 发布微头条
+                    result = await agent.post_micro_headline(
+                        content=content,
+                        activity_id=str(activity.activity_id),
+                        activity_title=activity.title,
+                        topic=f"#{hashtag}#" if hashtag else None
+                    )
+
+                    if result.get('success'):
+                        # 间隔
+                        if i < count:
+                            interval = config.behavior.get('comment_interval', 30)
+                            print(f"\n等待 {interval} 秒后继续...")
+                            await asyncio.sleep(interval)
+                else:
+                    # 非交互模式，只输出提示词
+                    print(f"\n活动: {activity.title}")
+                    print(f"提示词:\n{prompt}\n")
+
+        finally:
+            await agent.close()
     asyncio.run(run())
 
 
