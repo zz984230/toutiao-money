@@ -279,13 +279,13 @@ class CommentStorage:
     def add_activity_participation(
         self,
         activity_id: str,
-        activity_title: str = None,
-        operation_type: str = None,
+        activity_title: Optional[str] = None,
+        operation_type: Optional[str] = None,
         confidence: float = 0.0,
-        ai_analysis: str = None,
+        ai_analysis: Optional[str] = None,
         user_confirmed: bool = False,
-        execution_result: str = None
-    ):
+        execution_result: Optional[str] = None
+    ) -> None:
         """记录活动参与
 
         Args:
@@ -323,7 +323,7 @@ class CommentStorage:
         except Exception as e:
             print(f"记录活动参与失败: {e}")
 
-    def get_activity_participations(self, limit: int = 20) -> list:
+    def get_activity_participations(self, limit: int = 20) -> List[Dict]:
         """获取活动参与记录
 
         Args:
