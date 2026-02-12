@@ -8,6 +8,8 @@ from .config import config
 from .toutiao_client import get_client, close_client, ToutiaoClient
 from .generator import generator
 from .activity_fetcher import activity_fetcher, Activity
+from .activity_analyzer import ActivityAnalyzer
+from .activity_types import OperationType
 
 
 class ToutiaoAgent:
@@ -356,11 +358,12 @@ def activities_cmd(limit, category, all):
 @cli.command('start-activities')
 @click.option('--count', default=5, help='参与活动数量')
 def start_activities_cmd(count):
-    """自动参与活动（生成并发布微头条）"""
+    """智能参与活动（AI分析活动类型并执行相应操作）"""
     from .storage import storage
 
     async def run():
         agent = ToutiaoAgent()
+        analyzer = ActivityAnalyzer()
         try:
             await agent.initialize()
 
@@ -396,9 +399,61 @@ def start_activities_cmd(count):
                     if choice != 'y':
                         continue
 
-                # 生成提示词
-                hashtag = activity.get_hashtag() or activity.hashtag_name or ""
-                prompt = f"""请根据以下活动信息生成一条微头条内容：
+                # AI 分析活动
+                print("\n正在分析活动类型...")
+                result = await analyzer.analyze(activity)
+
+                # 显示分析结果
+                print(f"\n=== AI 分析结果 ===")
+                print(f"活动标题: {result.activity_title}")
+                print(f"活动介绍: {result.activity_intro}")
+                print(f"操作类型: {result.operation_type.label}")
+                print(f"置信度: {result.confidence:.0%}")
+                print(f"建议: {result.suggested_action}")
+
+                # 记录分析结果到数据库
+                storage.add_activity_participation(
+                    activity_id=str(activity.activity_id),
+                    activity_title=activity.title,
+                    operation_type=result.operation_type.value,
+                    confidence=result.confidence,
+                    ai_analysis=result.to_dict(),
+                    user_confirmed=False
+                )
+
+                # 确认操作方式
+                if config.behavior.get('confirmation_mode', True):
+                    print(f"\n检测到的操作方式: {result.operation_type.label}")
+                    confirm = input(f"是否使用此方式? (y=使用 / n=使用其他方式): ").strip().lower()
+
+                    if confirm == 'n':
+                        # 用户选择其他方式
+                        print("\n可选择的其他方式:")
+                        print("  1. 生成原创微头条 (generate_content)")
+                        print("  2. 点赞/转发 (like_share)")
+                        print("  3. 填写表单 (fill_form)")
+                        print("  4. 一键参与 (one_click)")
+                        print("  5. 其他 (other)")
+
+                        choice = input("\n请选择操作方式 (1-5): ").strip()
+                        operation_map = {
+                            '1': OperationType.GENERATE_CONTENT,
+                            '2': OperationType.LIKE_SHARE,
+                            '3': OperationType.FILL_FORM,
+                            '4': OperationType.ONE_CLICK,
+                            '5': OperationType.OTHER
+                        }
+                        operation = operation_map.get(choice, OperationType.OTHER)
+                    else:
+                        operation = result.operation_type
+                else:
+                    operation = result.operation_type
+
+                # 根据操作类型执行
+                if operation == OperationType.GENERATE_CONTENT or config.behavior.get('confirmation_mode', True):
+                    # 生成原创内容流程
+                    hashtag = activity.get_hashtag() or activity.hashtag_name or ""
+                    prompt = f"""请根据以下活动信息生成一条微头条内容：
 
 活动标题: {activity.title}
 活动介绍: {activity.introduction}
@@ -413,46 +468,70 @@ def start_activities_cmd(count):
 
 请直接输出微头条内容。"""
 
-                if config.behavior.get('confirmation_mode', True):
-                    print("\n提示词:")
-                    print(prompt)
-                    print("\n请将上述提示词发送给Claude获取微头条内容，然后输入内容:")
+                    if config.behavior.get('confirmation_mode', True):
+                        print("\n提示词:")
+                        print(prompt)
+                        print("\n请将上述提示词发送给Claude获取微头条内容，然后输入内容:")
 
-                    content = input("微头条内容: ").strip()
+                        content = input("微头条内容: ").strip()
 
-                    if not content:
-                        print("跳过")
-                        continue
+                        if not content:
+                            print("跳过")
+                            continue
 
-                    # 确认发布
-                    print(f"\n即将发布:")
-                    print(f"  内容: {content[:100]}{'...' if len(content) > 100 else ''}")
-                    if hashtag:
-                        print(f"  话题: #{hashtag}#")
+                        # 确认发布
+                        print(f"\n即将发布:")
+                        print(f"  内容: {content[:100]}{'...' if len(content) > 100 else ''}")
+                        if hashtag:
+                            print(f"  话题: #{hashtag}#")
 
-                    confirm = input("\n确认发布? (y/n): ").strip().lower()
-                    if confirm != 'y':
-                        print("已取消")
-                        continue
+                        confirm = input("\n确认发布? (y/n): ").strip().lower()
+                        if confirm != 'y':
+                            print("已取消")
+                            continue
 
-                    # 发布微头条
-                    result = await agent.post_micro_headline(
-                        content=content,
+                        # 发布微头条
+                        result = await agent.post_micro_headline(
+                            content=content,
+                            activity_id=str(activity.activity_id),
+                            activity_title=activity.title,
+                            topic=f"#{hashtag}#" if hashtag else None
+                        )
+
+                        # 更新参与记录
+                        storage.add_activity_participation(
+                            activity_id=str(activity.activity_id),
+                            activity_title=activity.title,
+                            operation_type=operation.value,
+                            confidence=0.0,
+                            ai_analysis=None,
+                            user_confirmed=True,
+                            execution_result='success' if result.get('success') else result.get('error', 'failed')
+                        )
+
+                        if result.get('success'):
+                            # 间隔
+                            if i < count:
+                                interval = config.behavior.get('comment_interval', 30)
+                                print(f"\n等待 {interval} 秒后继续...")
+                                await asyncio.sleep(interval)
+                    else:
+                        # 非交互模式，只输出提示词
+                        print(f"\n活动: {activity.title}")
+                        print(f"提示词:\n{prompt}\n")
+                else:
+                    print(f"\n暂未实现操作类型: {operation.label}")
+                    print("请手动参与活动或选择生成原创内容方式")
+                    # 更新参与记录
+                    storage.add_activity_participation(
                         activity_id=str(activity.activity_id),
                         activity_title=activity.title,
-                        topic=f"#{hashtag}#" if hashtag else None
+                        operation_type=operation.value,
+                        confidence=0.0,
+                        ai_analysis=None,
+                        user_confirmed=True,
+                        execution_result='not_implemented'
                     )
-
-                    if result.get('success'):
-                        # 间隔
-                        if i < count:
-                            interval = config.behavior.get('comment_interval', 30)
-                            print(f"\n等待 {interval} 秒后继续...")
-                            await asyncio.sleep(interval)
-                else:
-                    # 非交互模式，只输出提示词
-                    print(f"\n活动: {activity.title}")
-                    print(f"提示词:\n{prompt}\n")
 
         finally:
             await agent.close()
