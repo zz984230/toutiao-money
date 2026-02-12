@@ -22,3 +22,4 @@ data/cookies.json
 
 # Git worktrees
 .worktrees/
+.claude/settings.local.json
