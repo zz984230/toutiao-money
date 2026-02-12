@@ -1,5 +1,8 @@
 """活动分析模块 - 分析活动页面并生成参与建议"""
 
+import subprocess
+import json
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Dict, Optional, Any
 from .activity_types import OperationType
@@ -43,9 +46,97 @@ class ActionResult:
 class ActivityAnalyzer:
     """活动分析器 - 使用 AI 分析活动页面"""
 
-    def __init__(self):
-        """初始化分析器"""
-        pass
+    def __init__(self, base_url: str = "https://www.toutiao.com"):
+        """初始化分析器
+
+        Args:
+            base_url: 头条基础 URL
+        """
+        self.base_url = base_url
+
+    def _get_page_screenshot(self, url: str, output_path: str) -> bool:
+        """使用 playwright-cli 获取页面截图
+
+        Args:
+            url: 活动页面 URL
+            output_path: 输出文件路径
+
+        Returns:
+            是否成功
+        """
+        try:
+            result = subprocess.run(
+                ['playwright', 'screenshot', url, '-o', output_path],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"截图失败: {e}")
+            return False
+
+    def _get_page_text(self, url: str) -> str:
+        """使用 playwright-cli 获取页面文本
+
+        Args:
+            url: 活动页面 URL
+
+        Returns:
+            页面文本内容
+        """
+        try:
+            result = subprocess.run(
+                ['playwright', 'code', url, '-c', 'document.body.innerText'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                # 解析输出，提取实际文本
+                return result.stdout.strip()
+            return ""
+        except Exception as e:
+            print(f"获取页面文本失败: {e}")
+            return ""
+
+    def _get_interactive_elements(self, url: str) -> list:
+        """获取页面可交互元素
+
+        Args:
+            url: 活动页面 URL
+
+        Returns:
+            元素列表
+        """
+        try:
+            code = '''
+            Array.from(document.querySelectorAll('button, a, input, textarea'))
+                .filter(el => el.offsetParent !== null)  // 只取可见元素
+                .map(el => ({
+                    tag: el.tagName,
+                    text: el.textContent?.slice(0, 50),
+                    type: el.type || '',
+                    id: el.id || '',
+                    className: el.className || ''
+                }))
+            '''
+            result = subprocess.run(
+                ['playwright', 'code', url, '-c', code],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode == 0:
+                # 尝试解析 JSON 输出
+                try:
+                    return json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    pass
+            return []
+        except Exception as e:
+            print(f"获取交互元素失败: {e}")
+            return []
 
     async def analyze(self, activity) -> ActionResult:
         """分析活动页面，返回操作建议
