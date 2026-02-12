@@ -2,6 +2,7 @@
 
 import asyncio
 import click
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 from .config import config
@@ -536,6 +537,60 @@ def start_activities_cmd(count):
         finally:
             await agent.close()
     asyncio.run(run())
+
+
+@cli.command('activity-history')
+@click.option('--limit', default=20, help='显示条数')
+def activity_history_cmd(limit):
+    """查看活动参与历史"""
+    from .storage import storage
+
+    records = storage.get_activity_participations(limit)
+    if not records:
+        click.echo("暂无活动参与记录")
+        return
+
+    click.echo(f"\n最近 {len(records)} 条活动参与记录:\n")
+
+    from .activity_types import OperationType
+
+    for r in records:
+        click.echo(f"📅 {r['created_at']}")
+        if r['activity_title']:
+            click.echo(f"   活动: {r['activity_title'][:50]}...")
+        click.echo(f"   操作类型: {r['operation_type']}")
+        click.echo(f"   置信度: {r['confidence'] * 100:.0f}%")
+        click.echo(f"   用户确认: {'✅' if r['user_confirmed'] else '❌'}")
+        if r['execution_result']:
+            click.echo(f"   结果: {r['execution_result']}")
+        click.echo()
+
+
+@cli.command('activity-stats')
+def activity_stats_cmd():
+    """查看活动参与统计"""
+    from .storage import storage
+
+    records = storage.get_activity_participations(limit=1000)
+    if not records:
+        click.echo("暂无统计数据")
+        return
+
+    total = len(records)
+    confirmed = sum(1 for r in records if r['user_confirmed'])
+    avg_confidence = sum(r['confidence'] for r in records) / total if total > 0 else 0
+
+    # 按操作类型统计
+    type_counts = Counter(r['operation_type'] for r in records)
+
+    click.echo(f"\n📊 活动参与统计:\n")
+    click.echo(f"   总参与次数: {total}")
+    click.echo(f"   用户确认: {confirmed}")
+    click.echo(f"   平均置信度: {avg_confidence * 100:.1f}%")
+    click.echo(f"\n   操作类型分布:")
+    for op_type, count in type_counts.most_common():
+        click.echo(f"   - {op_type}: {count}")
+    click.echo()
 
 
 if __name__ == '__main__':
