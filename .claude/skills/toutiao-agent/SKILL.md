@@ -7,14 +7,13 @@ description: 头条热点自动评论和微头条发布助手。使用此技能�
 
 基于 Playwright 的头条自动化工具，支持：获取热点新闻、发表评论、发布微头条、获取并参与活动。
 
-## ⚠️ 重要注意事项
+## ⚠️ 核心原则
 
 **在发布任何内容（评论/微头条）前，必须先和用户交互确认！**
 
 - 默认 `confirmation_mode: true`，会要求用户确认
 - 只有在用户明确同意后，才能执行发布操作
 - 禁止擅自修改 `confirmation_mode: false` 来跳过确认
-- 如果命令因等待确认而超时，应先告知用户需要修改配置，征得同意后再执行
 
 ## 快速开始
 
@@ -25,7 +24,7 @@ uv sync
 # 安装 Playwright 浏览器
 uv run playwright install chromium
 
-# 配置登录（推荐使用 Cookie 方式）
+# 配置 Cookie 登录（推荐）
 # 1. 在浏览器登录头条
 # 2. 复制 sessionid, sid_tt, uid_tt 到 data/cookies.json
 
@@ -35,7 +34,6 @@ uv run toutiao-agent start --count 5
 
 # 微头条
 uv run toutiao-agent post-micro-headline "今天天气真好" --topic "#生活#"
-uv run toutiao-agent micro-headlines --limit 20
 
 # 活动参与
 uv run toutiao-agent activities --limit 10
@@ -52,285 +50,40 @@ uv run toutiao-agent start-activities --count 5
           storage.py (SQLite 记录历史)
 ```
 
-## CLI 命令参考
+## 按需参考文档
 
-### 热点评论命令
+### 安装与配置
 
-| 命令 | 功能 | 示例 |
-|------|------|------|
-| `hot-news --limit N` | 获取热点新闻（过滤已评论） | `uv run toutiao-agent hot-news --limit 20` |
-| `comment <id> <content>` | 直接发表评论 | `uv run toutiao-agent comment 123456 "内容"` |
-| `start --count N` | 自动评论流程（交互式） | `uv run toutiao-agent start --count 5` |
-| `history --limit N` | 查看评论历史 | `uv run toutiao-agent history --limit 20` |
-| `stats` | 查看评论统计 | `uv run toutiao-agent stats` |
+- **安装指导**: See [INSTALL.md](references/INSTALL.md) for dependency setup, Playwright installation, and initial configuration
 
-### 微头条命令
+### CLI 命令
 
-| 命令 | 功能 | 示例 |
-|------|------|------|
-| `post-micro-headline <content>` | 发布微头条 | `uv run toutiao-agent post-micro-headline "内容" --topic "#科技#"` |
-| `micro-headlines --limit N` | 查看微头条历史 | `uv run toutiao-agent micro-headlines --limit 20` |
-| `micro-stats` | 查看微头条统计 | `uv run toutiao-agent micro-stats` |
+- **命令参考**: See [CLI.md](references/CLI.md) for all available commands (hot-news, comment, micro-headline, activities, config)
 
-### 活动命令
+### 功能模块
 
-| 命令 | 功能 | 示例 |
-|------|------|------|
-| `activities --limit N` | 查看活动列表 | `uv run toutiao-agent activities --limit 10` |
-| `start-activities --count N` | 智能参与活动 | `uv run toutiao-agent start-activities --count 5` |
-| `activity-history --limit N` | 查看参与历史 | `uv run toutiao-agent activity-history --limit 20` |
-| `activity-stats` | 查看参与统计 | `uv run toutiao-agent activity-stats` |
+- **登录**: See [LOGIN.md](references/LOGIN.md) for Cookie/account login, status detection, and troubleshooting
+- **评论**: See [COMMENT.md](references/COMMENT.md) for comment posting workflow and storage
+- **微头条**: See [MICRO_HEADLINE.md](references/MICRO_HEADLINE.md) for micro-headline publishing and storage
+- **活动**: See [ACTIVITY.md](references/ACTIVITY.md) for activity participation flow and verification
+- **数据库**: See [DATABASE.md](references/DATABASE.md) for SQLite table structures
+- **配置**: See [CONFIG.md](references/CONFIG.md) for config.yaml and .env settings
 
-### 配置命令
+### 开发指南
 
-| 命令 | 功能 | 示例 |
-|------|------|------|
-| `config-show` | 显示当前配置 | `uv run toutiao-agent config-show` |
+- **注意事项**: See [NOTICES.md](references/NOTICES.md) for development guidelines and design decisions
 
-## 登录方式（已验证）
+## 关键设计决策
 
-### 方式 1: Cookie 登录（推荐）
+1. **选择 Playwright 而非 TTBot**: TTBot 与新版 Selenium 存在兼容性问题；Playwright 更现代且有更好的反检测能力
 
-在浏览器中登录后，复制关键 Cookie 到 `data/cookies.json`：
+2. **登录流程**:
+   - 登录按钮被 CSS 隐藏 (width=0, height=0) → 需使用 JavaScript 点击
+   - 账密登录通过 `[aria-label="账密登录"]` → 使用 `click(force=True)`
+   - Cookie 持久化保存在 `data/cookies.json`
 
-```json
-{
-  "cookies": [
-    {
-      "name": "sessionid",
-      "value": "你的sessionid值",
-      "domain": ".toutiao.com",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "sid_tt",
-      "value": "你的sid_tt值",
-      "domain": ".toutiao.com",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "uid_tt",
-      "value": "你的uid_tt值",
-      "domain": ".toutiao.com",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    }
-  ],
-  "origins": []
-}
-```
+3. **评论输入**: 使用 `contenteditable` 元素，非 `textarea`；发送用 `Enter` 键
 
-**必需的登录 Cookie**:
-- `sessionid` - 登录会话 ID
-- `sid_tt` - 用户会话 Token
-- `uid_tt` - 用户 ID
+4. **登录状态检测**: 多重指标（Cookie + localStorage + 页面状态）
 
-### 方式 2: 账密登录（需手动验证）
-
-账密登录后需要短信/滑块验证，建议在非 headless 模式下手动完成。
-
-登录关键步骤：
-1. 主登录按钮 (`.login-button`): CSS 尺寸为 0，必须用 JavaScript 点击
-2. 等待 5 秒让弹窗加载
-3. 点击账密登录选项 (`[aria-label="账密登录"]`)
-4. 填写表单后点击登录
-5. 等待手动完成验证
-
-## 微头条发布流程（已验证）
-
-微头条使用 Playwright 直接发布：
-
-1. **导航到发布页**: 访问 `/profile?publish_type=article`
-2. **等待加载**: 等待页面加载完成
-3. **选择微头条**: 点击微头条选项（如果需要）
-4. **填写内容**: 使用 `[contenteditable="true"]` 填写
-5. **添加话题**: 可选，通过 `topic` 参数添加
-6. **发送**: 点击发送按钮
-
-**确认步骤**（可选，由 `confirmation_mode` 控制）:
-```python
-if config.behavior.get('confirmation_mode', True):
-    print(f"\n即将发布微头条:")
-    print(f"  内容: {content[:100]}...")
-    if topic:
-        print(f"  话题: {topic}")
-    confirm = input("\n确认发布? (y/n): ")
-    if confirm != 'y':
-        return
-```
-
-完整实现见 `src/toutiao_agent/toutiao_client.py`
-
-## 评论发表流程（已验证）
-
-头条评论使用 `contenteditable` 输入框：
-
-1. **导航到文章**: 使用 `/article/{id}/` 格式
-2. **滚动到评论区**: `window.scrollTo(0, document.body.scrollHeight)`
-3. **点击输入区域**: `.ttp-comment-input`
-4. **填写内容**: `[contenteditable="true"]`
-5. **用户确认**: 在发送前必须和用户确认评论内容
-6. **发送**: 用户确认后按 `Enter` 键
-
-**确认步骤**:
-```python
-# 显示评论内容并等待用户确认
-print(f"\n即将发表评论:")
-print(f"  文章: {title}")
-print(f"  内容: {content}")
-confirm = input("确认发送? (y/n): ")
-if confirm.lower() == 'y':
-    # 发送评论
-    await editable.press('Enter')
-```
-
-完整实现见 `src/toutiao_agent/toutiao_client.py:464-520`
-
-## 登录状态检测
-
-`_check_login_success()` 方法使用多重指标：
-
-1. **主要**: 检查登录 Cookie (sessionid, sid_tt, uid_tt)
-2. **辅助**: 检查 localStorage (SLARDARweb_login_sdk)
-3. **备用**: 检查页面登录链接状态
-
-## 评论和微头条存储
-
-SQLite 数据库 (`data/comments.db`) 包含两个表：
-
-### comments 表
-```sql
-CREATE TABLE comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    article_id TEXT NOT NULL UNIQUE,
-    title TEXT,
-    url TEXT,
-    content TEXT,
-    created_at TEXT NOT NULL
-)
-```
-
-### micro_headlines 表
-```sql
-CREATE TABLE micro_headlines (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_id TEXT,
-    activity_title TEXT,
-    content TEXT,
-    hashtags TEXT,
-    images TEXT,
-    status TEXT NOT NULL DEFAULT 'draft',
-    created_at TEXT NOT NULL,
-    published_at TEXT
-)
-```
-
-存储在 `ToutiaoAgent.post_comment()` 和 `post_micro_headline()` 成功后自动调用。
-
-## 活动参与流程（已更新）
-
-1. **获取活动列表**: 从头条创作者平台 API 获取活动
-2. **过滤**: 只显示进行中且未参与的活动
-3. **智能分析**: 使用 playwright-cli 获取活动页面，AI 分析操作类型
-4. **显示分析结果**: 展示活动内容和 AI 建议的操作方式
-5. **用户确认**: 用户确认是否采用建议的操作方式
-6. **执行操作**:
-   - 【生成原创】→ 根据活动说明生成微头条并发布
-   - 【一键参与】→ 点击参与按钮
-   - 【点赞转发】→ 点赞/转发活动内容
-   - 【填写表单】→ 填写表单并提交
-7. **⚠️ 验证参与结果**: 执行操作后，必须验证是否参与成功
-   - **成功判断标准**:
-     - 页面显示"已参与"、"参与成功"等提示文字
-     - 按钮状态变为"已参与"、"已报名"等
-     - 页面跳转到参与确认页面
-     - 发布微头条后显示"发布成功"
-   - **失败情况**:
-     - 页面显示错误提示
-     - 操作无响应（超时）
-     - 需要APP扫码（无法在网页端完成）
-     - 活动已过期/已结束
-8. **记录结果**: 存储到 activity_participations 表，包含:
-   - `status`: `success`（成功）| `failed`（失败）| `pending`（待验证）
-   - `failure_reason`: 失败原因描述
-
-活动 API 端点: `https://mp.toutiao.com/mp/agw/activity`
-
-完整实现见 `src/toutiao_agent/activity_fetcher.py`
-
-## 配置管理
-
-- **主配置**: `config.yaml`
-- **敏感数据**: `.env` (TOUTIAO_USERNAME, TOUTIAO_PASSWORD)
-- **Cookie**: `data/cookies.json`
-- **确认模式**: `behavior.confirmation_mode` 控制交互式/自动执行
-- **MCP 服务器**: `mcp.server_url` 配置 MCP 服务器地址（可选）
-
-## 详细参考
-
-- **完整登录流程**: 见 [references/login-flow.md](references/login-flow.md)
-- **数据结构**: 见 [references/data-structures.md](references/data-structures.md)
-- **微头条发布流程**: 见 [references/micro-headline-flow.md](references/micro-headline-flow.md)
-- **故障排查**: 见 [references/troubleshooting.md](references/troubleshooting.md)
-
-## 开发注意事项
-
-1. **发布前必须确认**: 在发布任何内容前，必须先和用户交互确认，征得用户同意后才能执行
-2. **Cookie 登录**是最可靠的方式
-3. 评论输入使用 `contenteditable` 非 `textarea`
-4. 发送评论用 `Enter` 键，非提交按钮
-5. 登录状态检测用多重指标，非单一 URL 检查
-6. 所有评论和微头条成功后都会记录到 SQLite
-7. 活动参与通过发布带话题标签的微头条实现
-8. 微头条发布需要先导航到个人主页发布页面
-9. 活动抓取使用 HTTP 请求（无需 Playwright），需要有效的 Cookie
-10. **⚠️ 参与后必须验证**: 执行活动参与操作后，必须验证是否成功并记录结果
-
-## 活动参与验证方法（使用 playwright-cli）
-
-```bash
-# 1. 获取页面文本内容检查提示文字
-playwright-cli eval "document.body.innerText"
-
-# 2. 检查按钮文本是否变化为"已参与"
-playwright-cli eval "document.querySelector('button').textContent"
-
-# 3. 截图保存参与结果
-playwright-cli screenshot --filename=activity_result.png
-
-# 4. 检查页面 URL 是否跳转
-playwright-cli eval "window.location.href"
-
-# 5. 等待并检查特定元素出现
-playwright-cli eval "document.querySelector('.success-message') !== null"
-```
-
-### 验证判断流程
-```bash
-# 执行参与操作后
-# 步骤1: 等待2-3秒让页面响应
-sleep 3
-
-# 步骤2: 获取页面内容检查成功提示
-page_text=$(playwright-cli eval "document.body.innerText")
-
-# 步骤3: 判断是否包含成功关键词
-if echo "$page_text" | grep -q "已参与\|参与成功\|报名成功"; then
-    echo "✅ 参与成功"
-    # 记录: status=success
-else
-    echo "❌ 参与可能失败，需要用户确认"
-    # 记录: status=pending, failure_reason="需要人工确认"
-fi
-```
+5. **存储**: 关闭时自动保存 Cookie；SQLite 记录已评论文章和微头条
