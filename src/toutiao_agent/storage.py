@@ -61,6 +61,20 @@ class CommentStorage:
                 published_at TEXT
             )
         ''')
+        # 活动参与记录表
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS activity_participations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activity_id TEXT NOT NULL,
+                activity_title TEXT,
+                operation_type TEXT,
+                confidence REAL,
+                ai_analysis TEXT,
+                user_confirmed INTEGER DEFAULT 0,
+                execution_result TEXT,
+                created_at TEXT NOT NULL
+            )
+        ''')
         conn.commit()
 
     def is_commented(self, article_id: str) -> bool:
@@ -240,7 +254,7 @@ class CommentStorage:
             return 0
 
     def is_activity_participated(self, activity_id: str) -> bool:
-        """检查活动是否已参与
+        """检查活动是否已参与（检查 activity_participations 表）
 
         Args:
             activity_id: 活动 ID
@@ -251,13 +265,99 @@ class CommentStorage:
         try:
             conn = self._get_connection()
             cursor = conn.execute(
-                'SELECT 1 FROM micro_headlines WHERE activity_id = ? LIMIT 1',
+                'SELECT COUNT(*) FROM activity_participations WHERE activity_id = ? AND user_confirmed = 1',
                 (activity_id,)
             )
-            return cursor.fetchone() is not None
+            count = cursor.fetchone()[0]
+            return count > 0
         except Exception as e:
             print(f"检查活动参与状态失败: {e}")
             return False
+
+    # ============ 活动参与相关方法 ============
+
+    def add_activity_participation(
+        self,
+        activity_id: str,
+        activity_title: str = None,
+        operation_type: str = None,
+        confidence: float = 0.0,
+        ai_analysis: str = None,
+        user_confirmed: bool = False,
+        execution_result: str = None
+    ):
+        """记录活动参与
+
+        Args:
+            activity_id: 活动 ID
+            activity_title: 活动标题
+            operation_type: 操作类型
+            confidence: 置信度
+            ai_analysis: AI 分析结果 JSON
+            user_confirmed: 用户是否确认
+            execution_result: 执行结果
+        """
+        try:
+            conn = self._get_connection()
+
+            # 如果 ai_analysis 是 dict，转换为 JSON 字符串
+            ai_analysis_json = ai_analysis
+            if isinstance(ai_analysis, dict):
+                ai_analysis_json = json.dumps(ai_analysis, ensure_ascii=False)
+
+            conn.execute('''
+                INSERT INTO activity_participations
+                (activity_id, activity_title, operation_type, confidence, ai_analysis, user_confirmed, execution_result, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                activity_id,
+                activity_title,
+                operation_type,
+                confidence,
+                ai_analysis_json,
+                1 if user_confirmed else 0,
+                execution_result,
+                datetime.now().isoformat()
+            ))
+            conn.commit()
+        except Exception as e:
+            print(f"记录活动参与失败: {e}")
+
+    def get_activity_participations(self, limit: int = 20) -> list:
+        """获取活动参与记录
+
+        Args:
+            limit: 返回记录数
+
+        Returns:
+            参与记录列表
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute('''
+                SELECT activity_id, activity_title, operation_type, confidence,
+                       user_confirmed, execution_result, created_at
+                FROM activity_participations
+                ORDER BY created_at DESC
+                LIMIT ?
+            ''', (limit,))
+
+            rows = cursor.fetchall()
+            return [
+                {
+                    'activity_id': r[0],
+                    'activity_title': r[1],
+                    'operation_type': r[2],
+                    'confidence': r[3],
+                    'user_confirmed': bool(r[4]),
+                    'execution_result': r[5],
+                    'created_at': r[6]
+                }
+                for r in rows
+            ]
+        except Exception as e:
+            print(f"获取活动参与记录失败: {e}")
+            return []
 
 
 # 全局单例
