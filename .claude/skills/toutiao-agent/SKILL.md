@@ -77,7 +77,9 @@ uv run toutiao-agent start-activities --count 5
 | 命令 | 功能 | 示例 |
 |------|------|------|
 | `activities --limit N` | 查看活动列表 | `uv run toutiao-agent activities --limit 10` |
-| `start-activities --count N` | 自动参与活动 | `uv run toutiao-agent start-activities --count 5` |
+| `start-activities --count N` | 智能参与活动 | `uv run toutiao-agent start-activities --count 5` |
+| `activity-history --limit N` | 查看参与历史 | `uv run toutiao-agent activity-history --limit 20` |
+| `activity-stats` | 查看参与统计 | `uv run toutiao-agent activity-stats` |
 
 ### 配置命令
 
@@ -236,13 +238,19 @@ CREATE TABLE micro_headlines (
 
 存储在 `ToutiaoAgent.post_comment()` 和 `post_micro_headline()` 成功后自动调用。
 
-## 活动参与流程
+## 活动参与流程（已更新）
 
 1. **获取活动列表**: 从头条创作者平台 API 获取活动
 2. **过滤**: 只显示进行中且未参与的活动
-3. **生成微头条**: 根据活动信息生成带话题标签的微头条
-4. **发布**: 调用微头条发布接口
-5. **记录**: 存储到数据库，标记活动已参与
+3. **智能分析**: 使用 playwright-cli 获取活动页面，AI 分析操作类型
+4. **显示分析结果**: 展示活动内容和 AI 建议的操作方式
+5. **用户确认**: 用户确认是否采用建议的操作方式
+6. **执行操作**:
+   - 【生成原创】→ 根据活动说明生成微头条并发布
+   - 【一键参与】→ 点击参与按钮
+   - 【点赞转发】→ 点赞/转发活动内容
+   - 【填写表单】→ 填写表单并提交
+7. **记录**: 存储到 activity_participations 表
 
 活动 API 端点: `https://mp.toutiao.com/mp/agw/activity`
 
