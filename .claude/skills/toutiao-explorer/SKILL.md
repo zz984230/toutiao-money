@@ -137,11 +137,15 @@ uv run toutiao-agent activities --limit 1
 ```
 Cookie过期/未登录 → 重新执行登录流程，保存新cookie
 活动已结束 → 跳过，记录状态
-需要APP → 标记为低优先级
+需要APP → 标记为低优先级，使用 `is_activity_skipped_for_app()` 检查
 内容审核 → 调整内容策略后重试
-页面404/加载失败 → 先检查URL格式是否正确，再重试
+页面404/加载失败 → 先检查URL格式是否正确，再重试（E009改进）
   - 活动：确保使用 activity.href
   - 新闻：确保使用 www.toutiao.com/article/{id}/ 格式
+  - 使用 verify_page_loaded() 验证页面内容
+  - 点击活动卡片后验证URL是否包含activity_id
+活动卡片点击失败 → 使用 participate_from_activity_page() 完整流程（E009新增）
+  - 打开创作者中心 → 点击活动卡片 → 验证页面 → 发布内容
 未知错误 → 截图保存，咨询用户
 ```
 
@@ -210,10 +214,20 @@ news_url = f"https://www.toutiao.com/article/{article_id}/"  # ✅ 正确
 | 登录、发布微头条 | toutiao-agent | 自动加载 cookie，完整流程支持 |
 | 活动列表获取 | toutiao-agent | 需要登录状态 |
 | 活动页面分析 | ToutiaoClient | 继承 cookie 状态 |
+| **活动参与（正确流程）** | **`participate_from_activity_page()`** | **E009新增：确保从活动页面发布** |
 | 快速页面截图 | playwright-cli + state-load | 方便快捷，但需手动加载 cookie |
 
 - **toutiao-agent**: 处理登录、微头条发布、基础活动参与（自动加载 cookie）
 - **playwright-cli**: 页面探索、状态检测、证据截图（需手动 state-load）
+
+**E009 重要更新**：
+- 新增 `verify_page_loaded()` - 验证页面内容是否正确加载（检测404、空页面）
+- 新增 `participate_from_activity_page()` - 完整的活动参与流程
+  - 打开创作者中心
+  - 点击活动卡片（改进的选择器+重试）
+  - 验证页面加载
+  - 从活动页面发布内容
+- 新增 `is_activity_skipped_for_app()` - 检查活动是否因需要APP而被跳过
 
 ### 网络搜索边界
 
