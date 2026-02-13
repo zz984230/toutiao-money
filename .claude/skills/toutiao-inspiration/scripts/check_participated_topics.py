@@ -41,9 +41,9 @@ for i, item in enumerate(hot_topics, 1):
     read_count = item['readCount']
 
     if topic in participated_hashtags:
-        print(f"{i:2d}. #{topic}# - 阅读量: {read_count}万 ✅ 已参与")
+        print(f"{i:2d}. #{topic}# - 阅读量: {read_count}万 [已参与]")
     else:
-        print(f"{i:2d}. #{topic}# - 阅读量: {read_count}万 ⭕ 可参与")
+        print(f"{i:2d}. #{topic}# - 阅读量: {read_count}万 [可参与]")
         available_count += 1
 
 print("\n" + "=" * 80)
