@@ -12,7 +12,9 @@ src/toutiao_agent/__pycache__/
 
 # 数据文件
 data/cookies.json
+# 允许 comments.db 跟踪，忽略其他 .db 文件
 *.db
+!data/comments.db
 
 # 系统文件
 .DS_Store
