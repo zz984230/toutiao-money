@@ -37,3 +37,7 @@ data/temp/
 *.log
 
 .claude/data/
+
+data/playwright_context/GrShaderCache/
+
+data/playwright_context/
