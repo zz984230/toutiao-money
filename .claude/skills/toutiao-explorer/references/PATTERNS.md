@@ -2,7 +2,7 @@
 
 识别头条平台上的高频活动模式，提高处理效率。
 
-## 模式 0：活动卡片点击参与 (E001)
+## 模式 0：活动卡片点击参与 (E001 + E005)
 
 **特征**：
 - 需要从创作者中心首页点击活动卡片
@@ -15,9 +15,9 @@
 - 活动卡片包含活动标题、奖金、参与人数
 - 点击后URL变为 `mp.toutiao.com/profile_v3_public/public/activity/?...`
 
-**执行流程 (E001进化后)**：
+**执行流程 (E001+E005进化后)**：
 ```bash
-# 1. 打开创作者中心
+# 1. 打开创作者中心（必须从此入口进入）
 playwright-cli -s=toutiao goto https://mp.toutiao.com/profile_v4/index
 
 # 2. 点击活动卡片（通过活动ID或标题查找）
@@ -36,8 +36,10 @@ playwright-cli -s=toutiao click 'button:has-text("发布")'
 playwright-cli eval 'document.body.innerText.includes("发布成功")'
 ```
 
-**注意事项**：
-- 不能直接访问 `toutiao.com/activity/{id}` - 返回404
+**重要注意事项 (E005进化)**：
+- ⚠️ **不能直接访问活动URL**：直接访问 `mp.toutiao.com/profile_v3_public/public/activity/?...` 可能返回 404
+- ⚠️ **必须从活动广场进入**：创作者中心 → 点击活动卡片 → 活动页面
+- ⚠️ **直接访问缺少会话上下文**：从创作者中心点击会建立必要的权限验证和会话状态
 - 正确的活动URL格式：`mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={id}`
 - 活动卡片可能需要滚动到可见区域才能点击
 

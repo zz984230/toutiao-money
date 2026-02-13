@@ -618,6 +618,11 @@ class ToutiaoClient:
     async def open_activity_page(self, activity_id: str) -> bool:
         """打开活动页面（正确的URL格式）
 
+        ⚠️ E005进化警告：此方法可能不可靠！
+        直接访问活动URL可能返回404，因为头条有访问控制。
+        推荐使用：open_creator_center() + click_activity_card()
+        从创作者中心点击活动卡片会建立必要的会话上下文。
+
         Args:
             activity_id: 活动ID
 
@@ -628,6 +633,7 @@ class ToutiaoClient:
             # 使用正确的活动页面URL格式
             activity_url = f"https://mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={activity_id}"
             print(f"正在访问活动页面: {activity_url}")
+            print("  ⚠️ 注意：如果返回404，请使用 open_creator_center() + click_activity_card()")
 
             await self.page.goto(activity_url, timeout=30000)
             await self.page.wait_for_load_state('networkidle', timeout=15000)
