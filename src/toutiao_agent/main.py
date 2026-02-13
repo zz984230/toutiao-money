@@ -346,9 +346,12 @@ def activities_cmd(limit, category, all):
         click.echo(f"   💰 {activity.activity_reward}")
         click.echo(f"   👥 {activity.activity_participants} 人参与")
 
-        # 检查是否已参与
+        # 检查活动状态（已参与、已跳过、未参与）
         if storage.is_activity_participated(str(activity.activity_id)):
             click.echo(f"   ✅ 已参与")
+        elif storage.is_activity_processed(str(activity.activity_id)):
+            # 已跳过的活动
+            click.echo(f"   ⏭️  已跳过")
         else:
             click.echo(f"   ⭕ 未参与")
 
@@ -376,10 +379,10 @@ def start_activities_cmd(count):
                 only_unparticipated=True
             )
 
-            # 过滤已参与的活动
+            # 过滤已处理的活动（包括已参与和已跳过的）
             new_activities = [
                 a for a in activities
-                if not storage.is_activity_participated(str(a.activity_id))
+                if not storage.is_activity_processed(str(a.activity_id))
             ]
 
             if not new_activities:

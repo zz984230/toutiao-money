@@ -274,6 +274,27 @@ class CommentStorage:
             print(f"检查活动参与状态失败: {e}")
             return False
 
+    def is_activity_processed(self, activity_id: str) -> bool:
+        """检查活动是否已处理过（包括已参与和已跳过）
+
+        Args:
+            activity_id: 活动 ID
+
+        Returns:
+            bool: 是否已处理过该活动（包括跳过）
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute(
+                'SELECT COUNT(*) FROM activity_participations WHERE activity_id = ?',
+                (activity_id,)
+            )
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print(f"检查活动处理状态失败: {e}")
+            return False
+
     # ============ 活动参与相关方法 ============
 
     def add_activity_participation(
