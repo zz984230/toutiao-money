@@ -24,12 +24,35 @@ playwright-cli --version
 ## 探索循环
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  发现 → 筛选 → 分析 → 执行 → 验证 → 反馈/进化  │
-│                ↑                                    │
-│                └──────── 迭代优化 ───────────────────┘
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  登录检查 → 发现 → 筛选 → 分析 → 执行 → 验证 → 反馈/进化  │
+│     ↑                                                        │
+│     └──────── 未登录时先执行登录流程 ─────────────────────────────┘
+└────────────────────────────────────────────────────────────────────┘
 ```
+
+### 0. 登录检查阶段（MUST DO）
+
+**在任何探索操作之前，必须先确保登录状态**：
+
+```bash
+# 1. 检查 cookie 文件是否存在
+ls -la data/cookies.json
+
+# 2. 如果 cookie 文件不存在，执行登录
+uv run toutiao-agent login
+
+# 3. 验证登录状态
+uv run toutiao-agent activities --limit 1
+# 如果能正常获取活动列表，说明登录成功
+```
+
+**登录失败处理**：
+- Cookie 过期 → 重新执行登录流程
+- 需要验证码 → 使用非 headless 模式手动处理
+- 网络错误 → 检查网络连接后重试
+
+**重要**：每次会话开始时都应检查登录状态，避免后续操作失败。
 
 ### 1. 发现阶段
 - 调用 `toutiao-agent activities --limit 10` 获取活动列表
@@ -98,6 +121,11 @@ playwright-cli --version
 网页可完成 > 需要APP扫码
 已知活动类型 > 未知新型活动
 已验证可重复 > 首次尝试的活动
+
+⚠️ 重要：避免重复参与已参与的活动
+- 使用 storage.is_activity_participated() 检查活动状态
+- 已参与的活动在列表中显示 ✅，应跳过
+- 除非是每日任务（如每日幸运签），否则不重复参与
 ```
 
 **探索控制**：
@@ -107,9 +135,11 @@ playwright-cli --version
 
 **失败处理**：
 ```
+Cookie过期/未登录 → 重新执行登录流程，保存新cookie
 活动已结束 → 跳过，记录状态
 需要APP → 标记为低优先级
 内容审核 → 调整内容策略后重试
+页面404/加载失败 → 检查登录状态，使用 ToutiaoClient 重试
 未知错误 → 截图保存，咨询用户
 ```
 
@@ -124,8 +154,42 @@ playwright-cli --version
 
 ## 工具配合
 
-- **toutiao-agent skill**: 处理登录、微头条发布、基础活动参与
-- **playwright-cli**: 页面探索、状态检测、证据截图
+### Cookie 状态管理（优先使用）
+
+**优先使用 toutiao-agent 的 ToutiaoClient**，它自动加载 `data/cookies.json`：
+- 自动检查并加载已保存的 cookie
+- 登录成功后自动保存 cookie 状态
+- 确保所有操作在已登录状态下执行
+
+```python
+# ToutiaoClient 自动处理 cookie
+from toutiao_agent.toutiao_client import ToutiaoClient
+
+client = ToutiaoClient()
+await client.start()  # 自动加载 data/cookies.json
+# 执行操作...
+await client.close()  # 自动保存 cookie
+```
+
+**使用 playwright-cli 时的注意事项**：
+- playwright-cli 默认不加载 cookie，可能导致页面 404 或未登录错误
+- 如需使用 playwright-cli，必须先加载 cookie 状态：
+  ```bash
+  playwright-cli state-load data/cookies.json
+  playwright-cli open "https://m.toutiao.com/is/1856267285707785/"
+  ```
+
+### 工具选择指南
+
+| 操作场景 | 推荐工具 | 原因 |
+|---------|---------|------|
+| 登录、发布微头条 | toutiao-agent | 自动加载 cookie，完整流程支持 |
+| 活动列表获取 | toutiao-agent | 需要登录状态 |
+| 活动页面分析 | ToutiaoClient | 继承 cookie 状态 |
+| 快速页面截图 | playwright-cli + state-load | 方便快捷，但需手动加载 cookie |
+
+- **toutiao-agent**: 处理登录、微头条发布、基础活动参与（自动加载 cookie）
+- **playwright-cli**: 页面探索、状态检测、证据截图（需手动 state-load）
 - **网络查询**: 获取最新活动信息和规则解读
 
 ## 自适应学习

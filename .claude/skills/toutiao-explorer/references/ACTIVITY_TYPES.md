@@ -73,6 +73,31 @@
 
 ## 时间状态分类
 
+### 一次性活动 (one-time)
+- 参与一次后不可重复
+- 需要检查 storage.is_activity_participated()
+- 已参与的活动应跳过，避免重复
+
+**优先级**：★★★★☆（首次参与）
+
+### 每日活动 (daily)
+- **每天可以参与一次**
+- 即使已参与过，次日可再次参与
+- 需要记录上次参与日期，判断是否可以再次参与
+
+**示例**：每日幸运签、每日签到
+**优先级**：★★★★★（每日必做）
+**判断逻辑**：
+```python
+from datetime import date
+
+# 检查是否是今天已参与
+last_participated = storage.get_last_participation_date(activity_id)
+if last_participated != date.today().isoformat():
+    # 可以参与
+    return True
+```
+
 ### 进行中 (active)
 - 活动时间窗口内
 - 可立即参与

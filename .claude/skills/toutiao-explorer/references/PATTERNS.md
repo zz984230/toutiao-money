@@ -2,33 +2,50 @@
 
 识别头条平台上的高频活动模式，提高处理效率。
 
-## 模式 1：话题 + 发布抽奖
+## 模式 0：活动卡片点击参与 (E001)
 
 **特征**：
-- 要求发布带特定话题标签的内容
-- 内容可以是原创或转发
-- 奖励通常是现金或积分
+- 需要从创作者中心首页点击活动卡片
+- 点击后打开活动弹窗或新标签页
+- 在活动页面中填写内容并发布，而非直接发布微头条
+- 奖励通常是现金或流量扶持
 
 **识别**：
-- 页面包含"发布 #xxx# 话题"
-- 活动名称包含"话题活动"
-- 奖励说明中提到"按发布量"
+- 活动ID可在创作者中心的活动卡片区域找到
+- 活动卡片包含活动标题、奖金、参与人数
+- 点击后URL变为 `mp.toutiao.com/profile_v3_public/public/activity/?...`
 
-**执行**：
+**执行流程 (E001进化后)**：
 ```bash
-# 1. 使用 toutiao-agent 发布微头条
-uv run toutiao-agent post-micro-headline "内容" --topic "#指定话题#"
+# 1. 打开创作者中心
+playwright-cli -s=toutiao goto https://mp.toutiao.com/profile_v4/index
 
-# 2. 验证发布成功
-playwright-cli eval "document.body.innerText.includes('发布成功')"
+# 2. 点击活动卡片（通过活动ID或标题查找）
+playwright-cli -s=toutiao click "text=天南地北大拜年"
 
-# 3. 截图保存
-playwright-cli screenshot --filename=topic_activity.png
+# 3. 等待活动页面加载
+sleep 3
+
+# 4. 在活动页面中查找输入框并填写内容
+playwright-cli -s=toutiao fill '[contenteditable="true"]' "发布的内容"
+
+# 5. 点击发布按钮
+playwright-cli -s=toutiao click 'button:has-text("发布")'
+
+# 6. 验证发布成功
+playwright-cli eval 'document.body.innerText.includes("发布成功")'
 ```
 
-**频率**：每天 1-3 个此类活动
+**注意事项**：
+- 不能直接访问 `toutiao.com/activity/{id}` - 返回404
+- 正确的活动URL格式：`mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={id}`
+- 活动卡片可能需要滚动到可见区域才能点击
+
+**频率**：每天 1-5 个此类活动
 
 ---
+
+## 模式 1：话题 + 发布抽奖
 
 ## 模式 2：阅读量阶梯奖励
 
@@ -52,16 +69,18 @@ playwright-cli screenshot --filename=topic_activity.png
 
 ---
 
-## 模式 3：每日签到/打卡
+## 模式 3：每日签到/打卡 (每日任务)
 
 **特征**：
 - 一键完成，无内容要求
 - 通常连续签到有额外奖励
 - 奖励较小但稳定
+- **每天可参与一次**（与一次性活动不同）
 
 **识别**：
-- 按钮文字："签到"、"打卡"
+- 按钮文字："签到"、"打卡"、"抽签"
 - 活动类型：日常任务
+- 活动名称包含："每日"、"每日签到"、"每日幸运签"
 - 奖励：少量积分或现金
 
 **执行**：
@@ -71,7 +90,31 @@ playwright-cli click ".checkin-btn"
 playwright-cli eval "document.body.innerText.includes('签到成功')"
 ```
 
+**重要：每日任务判断逻辑**
+```python
+from datetime import date
+from toutiao_agent.storage import storage
+
+# 检查是否今天已参与
+def can_participate_daily(activity_id: str) -> bool:
+    """判断每日任务是否可以再次参与"""
+    participations = storage.get_activity_participations(activity_id, limit=10)
+
+    if not participations:
+        return True  # 从未参与过，可以参与
+
+    # 检查最近一次参与是否是今天
+    last_participation = participations[0]
+    last_date = last_participation['created_at'][:10]  # YYYY-MM-DD
+    today = date.today().isoformat()
+
+    return last_date != today  # 只有今天没参与过才返回True
+```
+
 **频率**：长期活动，每日一次
+**示例活动**：
+- 2月·每日幸运签 (ID: 1855746000734219)
+- 每日签到任务
 
 ---
 
