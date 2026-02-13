@@ -20,11 +20,11 @@ ls data/cookies.json || uv run toutiao-agent login
 ## 探索循环
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│  登录检查 → 发现话题 → 选择话题 → 分析内容 → 生成提示词 → 生成微头条 → 确认发布 → 反馈/进化  │
-│     ↑                                                                        │
-│     └──────── 未登录时先执行登录流程 ─────────────────────────────────────────┘
-└────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────┐
+│  登录检查 → 发现话题 → 选择话题 → 分析内容 → 生成提示词 → 生成微头条 → 确认发布 → 验证记录 → 清理临时文件  │
+│     ↑                                                                                    │
+│     └──────── 未登录时先执行登录流程 ─────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 0. 登录检查阶段（MUST DO）
@@ -171,6 +171,35 @@ https://mp.toutiao.com/profile_v3_public/public/inspiration/
 发布成功后：
 - 记录话题到 `storage.mark_topic_participated(topic_id, topic_name)`
 - 保存发布截图作为证据
+
+### 8. 清理临时文件阶段（MUST DO）
+
+**发布完成后，必须清理过程中产生的临时文件**：
+
+```bash
+# 清理临时文件
+uv run python .claude/skills/toutiao-inspiration/scripts/cleanup_temp_files.py
+
+# 或者先查看将要删除的文件（dry-run 模式）
+uv run python .claude/skills/toutiao-inspiration/scripts/cleanup_temp_files.py --dry-run
+
+# 或者只列出临时文件，不删除
+uv run python .claude/skills/toutiao-inspiration/scripts/cleanup_temp_files.py --list
+```
+
+**临时文件定义**：
+- `data/temp_*.py` - 临时分析脚本
+- `data/temp_*.json` - 临时数据文件
+- `data/publish_weitou.py` - 临时发布脚本
+- `data/published_screenshot.png` - 发布截图（每次发布会覆盖，可删除）
+- `data/debug/*.png, *.html` - 调试文件（可选保留）
+
+**保留文件**（不会被删除）：
+- `data/cookies.json` - 登录状态
+- `data/*.json` - 话题数据、已参与记录
+- `.claude/data/*` - 技能数据目录
+
+**清理时机**：每次发布任务完成后立即执行，避免临时文件积累。
 
 ## 失败处理
 
