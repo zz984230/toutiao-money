@@ -35,3 +35,5 @@ test_*.py
 # 临时文件目录（探索截图、日志等）
 data/temp/
 *.log
+
+.claude/data/
