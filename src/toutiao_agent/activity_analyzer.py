@@ -3,9 +3,10 @@
 import subprocess
 import json
 import tempfile
+import re
 from pathlib import Path
 from dataclasses import dataclass, asdict
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from .activity_types import OperationType
 
 
@@ -45,7 +46,7 @@ class ActionResult:
 
 
 class ActivityAnalyzer:
-    """活动分析器 - 使用 AI 分析活动页面"""
+    """活动分析器 - 使用 AI 分析活动页面（E002进化：添加直接页面分析）"""
 
     def __init__(self, base_url: str = "https://www.toutiao.com"):
         """初始化分析器
@@ -54,6 +55,152 @@ class ActivityAnalyzer:
             base_url: 头条基础 URL
         """
         self.base_url = base_url
+
+    async def analyze_from_page(self, activity, page) -> ActionResult:
+        """直接从已加载的页面分析活动（E002进化新增方法）
+
+        Args:
+            activity: Activity 对象
+            page: 已加载的 Playwright Page 对象
+
+        Returns:
+            ActionResult 包含操作类型、置信度等
+        """
+        activity_id = str(activity.activity_id)
+
+        print(f"[E002进化] 从当前页面分析活动: {activity.title}")
+
+        try:
+            # 使用 JavaScript 直接分析页面元素
+            analysis_result = await page.evaluate('''() => {
+                const results = {
+                    hasInput: false,
+                    hasTextarea:false,
+                    hasPublishButton:false,
+                    hasActivityCard:false,
+                    inputTypes:[],
+                    buttonTexts:[],
+                    pageTitle:'',
+                    pageText:''
+                };
+
+                // 获取页面标题
+                const titleEl = document.querySelector('.activity-title, h1, .title');
+                if (titleEl) {
+                    results.pageTitle = titleEl.textContent?.trim().substring(0, 50) || '';
+                }
+
+                // 检测输入框
+                const contenteditables = document.querySelectorAll('[contenteditable="true"]');
+                const textareas = document.querySelectorAll('textarea');
+
+                results.hasInput = contenteditables.length > 0 || textareas.length > 0;
+
+                if (contenteditables.length > 0) {
+                    contenteditables.forEach((el, i) => {
+                        if (i < 3) {  // 只记录前3个
+                            results.inputTypes.push('contenteditable');
+                        }
+                    });
+                }
+
+                if (textareas.length > 0) {
+                    textareas.forEach((el, i) => {
+                        if (i < 3) {  // 只记录前3个
+                            results.inputTypes.push('textarea');
+                        }
+                    });
+                }
+
+                // 检测发布/提交按钮
+                const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                const publishKeywords = ['发布', '发送', '提交', '确认', '立即参与'];
+
+                buttons.forEach(btn => {
+                    const text = btn.textContent?.trim() || '';
+                    results.buttonTexts.push(text.substring(0, 20));
+                    if (publishKeywords.some(kw => text.includes(kw))) {
+                        results.hasPublishButton = true;
+                    }
+                });
+
+                // 检测活动卡片（用于验证是否在活动页面）
+                const activityLinks = Array.from(document.querySelectorAll('a[href*="activity"]'));
+                results.hasActivityCard = activityLinks.length > 0;
+
+                // 获取页面文本（用于回退规则分析）
+                results.pageText = document.body.innerText.substring(0, 1000);
+
+                return results;
+            }''')
+
+            # 根据检测结果确定操作类型
+            operation_type, confidence, suggested = self._analyze_from_elements(
+                analysis_result, activity
+            )
+
+            return ActionResult(
+                activity_title=activity.title,
+                activity_intro=activity.introduction,
+                operation_type=operation_type,
+                confidence=confidence,
+                detected_elements={
+                    'input_types': analysis_result.get('inputTypes', []),
+                    'has_publish_button': analysis_result.get('hasPublishButton', False),
+                    'button_texts': analysis_result.get('buttonTexts', []),
+                    'has_activity_card': analysis_result.get('hasActivityCard', False),
+                    'page_title': analysis_result.get('pageTitle', ''),
+                },
+                suggested_action=suggested
+            )
+
+        except Exception as e:
+            print(f"[E002进化] 页面分析失败: {e}")
+            # 降级到规则分析
+            return ActionResult(
+                activity_title=activity.title,
+                activity_intro=activity.introduction,
+                operation_type=OperationType.GENERATE_CONTENT,
+                confidence=0.3,  # 降低置信度但仍尝试
+                detected_elements={'error': str(e)},
+                suggested_action="页面分析失败，建议手动生成原创内容参与"
+            )
+
+    def _analyze_from_elements(self, analysis: Dict, activity) -> tuple:
+        """从页面元素分析结果确定操作类型（E002进化新增方法）
+
+        Args:
+            analysis: JavaScript 返回的页面分析结果
+            activity: Activity 对象
+
+        Returns:
+            (operation_type, confidence, suggested_action)
+        """
+        has_input = analysis.get('hasInput', False)
+        has_publish = analysis.get('hasPublishButton', False)
+        has_activity_card = analysis.get('hasActivityCard', False)
+        button_texts = analysis.get('buttonTexts', [])
+        page_title = analysis.get('pageTitle', '')
+        page_text = analysis.get('pageText', '')
+
+        # 检测是否在活动页面（有活动卡片链接）
+        if has_activity_card:
+            return OperationType.GENERATE_CONTENT, 0.95, "在活动页面中，使用输入框填写内容并发布"
+
+        # 检测是否有发布按钮
+        if has_publish:
+            return OperationType.GENERATE_CONTENT, 0.90, "检测到发布按钮，可以填写内容并发布"
+
+        # 检测有输入框但没发布按钮（可能需要先点击某按钮）
+        if has_input and not has_publish:
+            return OperationType.GENERATE_CONTENT, 0.70, "检测到输入框，可能需要先点击参与按钮"
+
+        # 一键参与检测
+        if any('一键参与' in text for text in button_texts):
+            return OperationType.ONE_CLICK, 0.95, "检测到一键参与按钮"
+
+        # 默认：生成原创内容
+        return OperationType.GENERATE_CONTENT, 0.50, "未检测到特殊操作类型，建议生成原创内容"
 
     def _get_page_screenshot(self, url: str, output_path: str) -> bool:
         """使用 playwright-cli 获取页面截图
@@ -148,7 +295,12 @@ class ActivityAnalyzer:
         Returns:
             ActionResult 包含操作类型、活动内容、置信度等
         """
-        url = activity.href if activity.href else f"{self.base_url}/activity/{activity.activity_id}"
+        # 使用正确的活动页面URL格式（E001进化更新）
+        if activity.href:
+            url = activity.href
+        else:
+            # 正确的活动URL格式
+            url = f"https://mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={activity.activity_id}"
 
         print(f"正在分析活动: {activity.title}")
         print(f"URL: {url}")

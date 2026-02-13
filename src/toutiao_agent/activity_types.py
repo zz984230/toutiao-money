@@ -14,18 +14,21 @@ class OperationType(Enum):
     ONE_CLICK = "one_click"                # 一键参与
     OTHER = "other"                        # 其他类型
 
-    _LABELS = {
-        GENERATE_CONTENT: "生成原创",
-        LIKE_SHARE: "点赞转发",
-        FILL_FORM: "填写表单",
-        ONE_CLICK: "一键参与",
-        OTHER: "其他",
-    }
+    @staticmethod
+    def _get_labels():
+        """获取所有操作类型的中文标签"""
+        return {
+            OperationType.GENERATE_CONTENT: "生成原创",
+            OperationType.LIKE_SHARE: "点赞转发",
+            OperationType.FILL_FORM: "填写表单",
+            OperationType.ONE_CLICK: "一键参与",
+            OperationType.OTHER: "其他",
+        }
 
     @property
     def label(self) -> str:
         """中文标签"""
-        return self._LABELS[self]
+        return self._get_labels()[self]
 
     def __str__(self) -> str:
         return self.label

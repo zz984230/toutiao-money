@@ -23,3 +23,13 @@ data/cookies.json
 # Git worktrees
 .worktrees/
 .claude/settings.local.json
+
+# Playwright CLI 缓存
+.playwright-cli/
+
+# 调试截图（临时文件）
+*.png
+activity_*.png
+
+# 临时测试脚本
+test_*.py

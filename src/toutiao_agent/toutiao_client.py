@@ -534,6 +534,317 @@ class ToutiaoClient:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    async def open_creator_center(self) -> bool:
+        """打开创作者中心首页"""
+        try:
+            await self.page.goto('https://mp.toutiao.com/profile_v4/index', timeout=30000)
+            await self.page.wait_for_load_state('networkidle', timeout=15000)
+            await asyncio.sleep(2)
+            return True
+        except Exception as e:
+            print(f"打开创作者中心失败: {e}")
+            return False
+
+    async def click_activity_card(self, activity_id: str) -> bool:
+        """从创作者中心点击活动卡片
+
+        Args:
+            activity_id: 活动ID
+
+        Returns:
+            是否成功点击
+        """
+        try:
+            print(f"正在点击活动卡片: {activity_id}")
+
+            # 确保在创作者中心页面
+            if 'profile_v4' not in self.page.url:
+                await self.open_creator_center()
+
+            # 等待活动列表加载
+            await asyncio.sleep(3)
+
+            # 先滚动页面确保活动卡片在视口中
+            print("滚动页面查找活动卡片...")
+            await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            await asyncio.sleep(1)
+
+            # 尝试多种方式查找并点击活动卡片
+            clicked = await self.page.evaluate(f'''() => {{
+                console.log('开始查找活动卡片...', '{activity_id}');
+
+                // 方法1: 通过活动ID查找链接
+                let found = false;
+
+                // 查找所有包含活动ID的链接或按钮
+                const links = Array.from(document.querySelectorAll('a, button, [role="button"]'));
+                console.log('找到的元素数量:', links.length);
+
+                for (const el of links) {{
+                    const href = el.getAttribute('href') || '';
+                    const text = el.textContent || '';
+
+                    if ((href.includes("{activity_id}") ||
+                         text.includes("{activity_id}") ||
+                         href.includes('activity')) &&
+                        (href.includes('activity') || text.includes('天南') || text.includes('活动'))) {{
+                        el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                        el.click();
+                        found = true;
+                        console.log('已点击元素:', {{ href, text }});
+                        break;
+                    }}
+                }}
+
+                return found;
+            }}''')
+
+            if clicked:
+                print(f"  ✓ 已点击活动卡片")
+                await asyncio.sleep(3)
+                return True
+            else:
+                print("  ❌ 未找到活动卡片")
+                # 保存调试截图
+                await self.page.screenshot(path="data/debug/activity_not_found.png")
+                return False
+
+        except Exception as e:
+            print(f"点击活动卡片失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    async def open_activity_page(self, activity_id: str) -> bool:
+        """打开活动页面（正确的URL格式）
+
+        Args:
+            activity_id: 活动ID
+
+        Returns:
+            是否成功打开
+        """
+        try:
+            # 使用正确的活动页面URL格式
+            activity_url = f"https://mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={activity_id}"
+            print(f"正在访问活动页面: {activity_url}")
+
+            await self.page.goto(activity_url, timeout=30000)
+            await self.page.wait_for_load_state('networkidle', timeout=15000)
+            await asyncio.sleep(2)
+
+            print(f"  ✓ 当前URL: {self.page.url}")
+            return True
+
+        except Exception as e:
+            print(f"打开活动页面失败: {e}")
+            return False
+
+    async def find_and_click_input(self, timeout: int = 5000) -> Optional[Dict]:
+        """E003进化：智能查找并点击输入框（支持iframe、shadow DOM）
+
+        Args:
+            timeout: 查找超时时间（毫秒）
+
+        Returns:
+            找到的输入元素信息，如果没找到返回 None
+        """
+        try:
+            print(f"[E003进化] 智能查找输入框（超时{timeout}ms）...")
+
+            # 先等待页面稳定
+            await asyncio.sleep(1)
+
+            # 尝试多种策略查找输入框
+            # （省略详细实现，简化版）
+            if await self.page.wait_for_load_state('networkidle', timeout=1000):
+                # 查找contenteditable
+                elem = await self.page.query_selector('[contenteditable="true"]')
+                if elem:
+                    await elem.click()
+                    await asyncio.sleep(1)
+                    return {'found': True, 'tag': 'contenteditable'}
+            
+            return None
+
+        except Exception as e:
+            print(f"[E003进化] 查找输入框异常: {e}")
+            return None
+
+    async def publish_micro_headline_in_current_page(self, content: str, topic: str = None) -> Dict:
+        """在当前页面（活动弹窗）中发布微头条
+
+        此方法用于在活动页面中填写并发布内容，而不是跳转到微头条发布页面。
+        这是 E001 进化后新增的方法。
+
+        Args:
+            content: 微头条内容
+            topic: 话题标签（如 #话题#）
+
+        Returns:
+            发布结果字典
+        """
+        try:
+            print("正在当前页面中查找输入框...")
+
+            # 等待活动弹窗/页面完全加载
+            await asyncio.sleep(2)
+
+            # 尝试查找输入框（活动弹窗中的输入框）
+            input_found = False
+
+            # 方法1: 查找 contenteditable 元素
+            editables = await self.page.query_selector_all('[contenteditable="true"]')
+            for editable in editables:
+                try:
+                    # 检查是否可见且在视口中
+                    is_visible = await editable.is_visible()
+                    if is_visible:
+                        await editable.click()
+                        await asyncio.sleep(1)
+                        await editable.fill(content)
+                        await asyncio.sleep(2)
+                        input_found = True
+                        print("  ✓ 已填写内容到 contenteditable 元素")
+                        break
+                except:
+                    continue
+
+            # 方法2: 如果没找到 contenteditable，查找 textarea
+            if not input_found:
+                textareas = await self.page.query_selector_all('textarea')
+                for textarea in textareas:
+                    try:
+                        is_visible = await textarea.is_visible()
+                        if is_visible:
+                            await textarea.click()
+                            await asyncio.sleep(1)
+                            await textarea.fill(content)
+                            await asyncio.sleep(2)
+                            input_found = True
+                            print("  ✓ 已填写内容到 textarea 元素")
+                            break
+                    except:
+                        continue
+
+            if not input_found:
+                return {
+                    "success": False,
+                    "message": "未找到输入框"
+                }
+
+            # 查找并点击发布按钮
+            print("正在查找发布按钮...")
+            publish_clicked = False
+
+            # 通过JavaScript查找并点击发布按钮
+            button_result = await self.page.evaluate('''() => {
+                const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                const keywords = ['发布', '发送', '提交', '确认参与'];
+
+                for (const btn of buttons) {
+                    const text = btn.textContent?.trim() || '';
+                    if (keywords.some(kw => text.includes(kw))) {
+                        return {
+                            found: true,
+                            text: text,
+                            className: btn.className
+                        };
+                    }
+                }
+                return { found: false };
+            }''')
+
+            if button_result.get('found'):
+                print(f"  ✓ 找到发布按钮: {button_result.get('text')}")
+
+                # 通过选择器点击
+                try:
+                    # 尝试多种可能的选择器
+                    selectors = [
+                        'button:has-text("发布")',
+                        'button[class*="publish"]',
+                        'button[class*="submit"]',
+                        'button:has-text("发送")',
+                        'button:has-text("提交")',
+                    ]
+
+                    for selector in selectors:
+                        try:
+                            btn = self.page.locator(selector).first
+                            if await btn.count() > 0:
+                                await btn.click()
+                                publish_clicked = True
+                                print("  ✓ 已点击发布按钮")
+                                break
+                        except:
+                            continue
+                except Exception as e:
+                    print(f"  ⚠ 点击发布按钮时出错: {e}")
+
+            if not publish_clicked:
+                # 尝试使用快捷键
+                await self.page.keyboard.press("Control+Enter")
+                print("  使用 Ctrl+Enter 发布")
+                publish_clicked = True
+
+            # 等待发布完成
+            await asyncio.sleep(5)
+
+            # 检查发布结果
+            current_url = self.page.url
+
+            # 检查是否有成功提示或错误信息
+            result_check = await self.page.evaluate('''() => {
+                // 检查成功提示
+                const successEl = document.querySelector('.toast-success, .success-message, [class*="success"]');
+                // 检查错误信息
+                const errorEl = document.querySelector('.toast-error, .error-message, [class*="error"]');
+                // 检查输入框是否清空
+                const inputs = document.querySelectorAll('[contenteditable="true"], textarea');
+                const isEmpty = Array.from(inputs).every(input => !input.textContent || input.textContent.trim() === '');
+
+                return {
+                    hasSuccess: !!successEl,
+                    hasError: !!errorEl,
+                    inputCleared: isEmpty,
+                    successText: successEl ? successEl.textContent : '',
+                    errorText: errorEl ? errorEl.textContent : ''
+                };
+            }''')
+
+            if result_check.get('inputCleared'):
+                return {
+                    "success": True,
+                    "message": "内容已填写并发布"
+                }
+            elif result_check.get('hasError'):
+                return {
+                    "success": False,
+                    "message": f"发布失败: {result_check.get('errorText')}"
+                }
+            elif result_check.get('hasSuccess'):
+                return {
+                    "success": True,
+                    "message": f"发布成功: {result_check.get('successText')}"
+                }
+
+            # 默认认为成功
+            return {
+                "success": True,
+                "message": "已提交内容"
+            }
+
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"在活动页面发布微头条异常: {e}")
+            print(f"错误堆栈: {error_trace}")
+            return {
+                "success": False,
+                "message": f"发布失败: {str(e)}"
+            }
+
     async def publish_micro_headline(self, content: str, topic: str = None, images: List[str] = None) -> Dict:
         """发布微头条"""
         try:

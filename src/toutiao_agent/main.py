@@ -400,9 +400,18 @@ def start_activities_cmd(count):
                     if choice != 'y':
                         continue
 
-                # AI 分析活动
+                # AI 分析活动（使用 E002 进化的 analyze_from_page 方法）
                 print("\n正在分析活动类型...")
-                result = await analyzer.analyze(activity)
+
+                # 构建活动 URL 并打开页面
+                activity_url = activity.href or f"https://mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={activity.activity_id}"
+                print(f"  访问活动页面: {activity_url}")
+                await agent.client.page.goto(activity_url, timeout=30000)
+                await agent.client.page.wait_for_load_state('networkidle', timeout=15000)
+                await asyncio.sleep(2)
+
+                # 使用当前页面进行分析（无需子进程调用）
+                result = await analyzer.analyze_from_page(activity, agent.client.page)
 
                 # 显示分析结果
                 print(f"\n=== AI 分析结果 ===")
