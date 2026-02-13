@@ -112,3 +112,150 @@ def is_valid_topic(topic_name):
 4. 支持增量更新（只获取新话题，避免重复）
 
 ---
+
+## E012 - 2026-02-14
+
+### 场景：完整的微头条发布成功流程
+
+**背景**：从零开始，使用已有 Cookie 登录 → 选择创作灵感话题 → 撰写内容 → 成功发布
+
+**成功步骤**：
+
+1. **检查登录状态**
+   - 确认 `data/cookies.json` 文件存在
+   - 文件大小约 68KB，说明 Cookie 有效
+
+2. **获取热门话题**
+   - 运行脚本：`get_hotspot_topics_clean.py`
+   - 访问：`https://mp.toutiao.com/profile_v4/activity/hot-spot`
+   - 使用正则提取：`#([^#\s]+(?:\s+[^#\s]+)*)#` 匹配话题
+   - 按阅读量排序，获取 16 个有效话题
+
+3. **筛选话题**
+   - 从数据库查询已参与话题
+   - 过滤掉已参与的话题（使用 `storage.is_topic_participated()` 检查）
+   - 展示可用话题列表
+
+4. **用户选择话题**
+   - 通过 `AskUserQuestion` 工具展示选项
+   - 用户选择：`#分享一件你喜欢的藏品#`（389.3万阅读）
+
+5. **生成反共识内容**
+   - 根据 `PROMPT_STYLES.md` 避免 AI 味
+   - 立场：收藏是智商税（反共识角度）
+   - 内容：
+     ```
+     收藏这事儿就是花钱买安慰。当年咬牙买的那台"绝版"胶片机，现在连闲鱼都无人问津。99%的收藏品最后都是吃灰，咱就是说，不如把钱花在体验上。#分享一件你喜欢的藏品#
+     ```
+
+6. **用户确认发布**
+   - 使用 `AskUserQuestion` 工具展示内容预览
+   - 用户确认：`确认发布`
+
+7. **成功发布**
+   - 使用 ToutiaoClient 的 `publish_micro_headline()` 方法
+   - 访问发布页面：`https://mp.toutiao.com/profile_v4/weitoutiao/publish`（注意：weitoutiao 拼写正确）
+   - 找到输入框：ProseMirror contenteditable 元素
+   - 填写内容并点击发布按钮
+   - 发布成功，记录到数据库
+
+### 关键发现
+
+1. **URL 拼写确认**：
+   - 微头条发布页面 URL：`/profile_v4/weitoutiao/publish`
+   - "微头条"拼音 = weitoutiao（一个 t）
+   - 代码中 URL 已是正确的，不需要修改
+
+2. **发布页面元素**：
+   - 输入框选择器：`[contenteditable="true"]`，className 为 `ProseMirror`
+   - placeholder 内容：`有什么新鲜事想告诉大家？`
+   - 发布按钮：`button:has-text("发布")` 或 className `byte-btn byte-btn-primary publish-content`
+
+3. **Windows 编码问题**：
+   - Python 脚本中包含中文时，使用字符串拼接而非单行字符串
+   - 示例：
+     ```python
+     # 错误（编码问题）
+     content = "收藏这事儿就是花钱买安慰..."
+
+     # 正确（字符串拼接）
+     content = (
+         "收藏这事儿就是花钱买安慰。"
+         "当年咬牙买的那台..."
+     )
+     ```
+
+4. **数据库记录**：
+   - 发布成功后使用 `storage.add_micro_headline()` 记录
+   - 同时更新话题参与状态，避免重复发布
+
+### 成功的完整代码
+
+**发布脚本**（`publish_weit.py`）：
+```python
+# -*- coding: utf-8 -*-
+import asyncio
+import sys
+import io
+from pathlib import Path
+
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root / "src"))
+
+from toutiao_agent.toutiao_client import ToutiaoClient
+
+async def main():
+    client = ToutiaoClient()
+    await client.start()
+
+    try:
+        content = (
+            "收藏这事儿就是花钱买安慰。当年咬牙买的那台"
+            '"绝版"胶片机，现在连闲鱼都无人问津。'
+            "99%的收藏品最后都是吃灰，咱就是说，"
+            "不如把钱花在体验上。#分享一件你喜欢的藏品#"
+        )
+        topic = "#分享一件你喜欢的藏品#"
+
+        result = await client.publish_micro_headline(
+            content=content,
+            topic=topic
+        )
+
+        if result.get('success'):
+            from toutiao_agent.storage import storage
+            storage.add_micro_headline(
+                content=content,
+                hashtags=topic,
+                images=None
+            )
+    finally:
+        await client.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### 验证结果
+
+- ✅ 发布时间：2026-02-14T02:03:16
+- ✅ 数据库记录：已保存到 `data/comments.db`
+- ✅ 话题标签：#分享一件你喜欢的藏品#
+- ✅ 内容长度：68 字（符合 50-100 字要求）
+
+### 需要同步的文件
+
+1. **更新 SKILL.md**：确认 URL 正确性，添加 Windows 编码处理建议
+2. **更新 STRATEGIES.md**：记录完整的微头条发布策略
+
+### 后续优化方向
+
+1. 添加自动话题去重功能（基于数据库历史记录）
+2. 支持批量发布多个话题
+3. 添加发布结果验证（截图保存）
+4. 优化内容生成提示词模板
+
+---
