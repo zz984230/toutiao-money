@@ -335,27 +335,27 @@ def activities_cmd(limit, category, all):
         print("暂无可用活动")
         return
 
-    click.echo(f"\n📋 找到 {len(activities)} 个活动:\n")
+    click.echo(f"\n[*] 找到 {len(activities)} 个活动:\n")
 
     for i, activity in enumerate(activities[:limit], 1):
         click.echo(f"{i}. {activity.title}")
-        click.echo(f"   📖 {activity.introduction}")
+        click.echo(f"   [简介] {activity.introduction}")
         if activity.hashtag_name:
-            click.echo(f"   🏷️  话题: #{activity.hashtag_name}#")
-        click.echo(f"   ⏰ {activity.activity_time}")
-        click.echo(f"   💰 {activity.activity_reward}")
-        click.echo(f"   👥 {activity.activity_participants} 人参与")
+            click.echo(f"   [话题] #{activity.hashtag_name}#")
+        click.echo(f"   [时间] {activity.activity_time}")
+        click.echo(f"   [奖励] {activity.activity_reward}")
+        click.echo(f"   [参与] {activity.activity_participants} 人参与")
 
         # 检查活动状态（已参与、已跳过、未参与）
         if storage.is_activity_participated(str(activity.activity_id)):
-            click.echo(f"   ✅ 已参与")
+            click.echo(f"   [状态] 已参与")
         elif storage.is_activity_processed(str(activity.activity_id)):
             # 已跳过的活动
-            click.echo(f"   ⏭️  已跳过")
+            click.echo(f"   [状态] 已跳过")
         else:
-            click.echo(f"   ⭕ 未参与")
+            click.echo(f"   [状态] 未参与")
 
-        click.echo(f"   🆔 ID: {activity.activity_id}")
+        click.echo(f"   [ID] {activity.activity_id}")
         click.echo()
 
 

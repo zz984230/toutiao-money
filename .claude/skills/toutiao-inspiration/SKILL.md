@@ -35,15 +35,14 @@ ls data/cookies.json || uv run toutiao-agent login
 # 1. 检查 cookie 文件是否存在
 ls -la data/cookies.json
 
-# 2. 如果 cookie 文件不存在，执行登录
-uv run toutiao-agent login
+# 2. 如果 cookie 文件不存在，提示缺少cookie；如果cookie文件存在，则使用cookie
 
 # 3. 验证登录状态
 uv run toutiao-agent activities --limit 1
 ```
 
 **登录失败处理**：
-- Cookie 过期 → 重新执行登录流程
+- Cookie 过期 → 提示过期
 - 需要验证码 → 使用非 headless 模式手动处理
 - 网络错误 → 检查网络连接后重试
 
