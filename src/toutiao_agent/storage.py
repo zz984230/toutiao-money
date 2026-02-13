@@ -295,6 +295,28 @@ class CommentStorage:
             print(f"检查活动处理状态失败: {e}")
             return False
 
+    def is_activity_skipped_for_app(self, activity_id: str) -> bool:
+        """检查活动是否因为需要APP而被跳过
+
+        Args:
+            activity_id: 活动 ID
+
+        Returns:
+            bool: 是否因为需要APP而跳过该活动
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute(
+                '''SELECT COUNT(*) FROM activity_participations
+                   WHERE activity_id = ? AND operation_type = ?''',
+                (activity_id, 'skip_requires_app')
+            )
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            print(f"检查活动APP跳过状态失败: {e}")
+            return False
+
     # ============ 活动参与相关方法 ============
 
     def add_activity_participation(

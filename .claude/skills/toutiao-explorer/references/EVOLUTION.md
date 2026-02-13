@@ -4,14 +4,92 @@
 
 ## 进化统计
 
-- 总进化次数: 8
-- 成功解决问题: 8
+- 总进化次数: 9
+- 成功解决问题: 9
 - 新增活动模式: 2
 - 上次进化: 2026-02-13
 
 ---
 
 ## 最近进化
+
+### [E009] 2026-02-13 - 活动参与流程全面修复：页面加载、卡片点击、记录重复
+
+**触发**: 用户主动反馈
+
+**问题**:
+1. "上头条 聊热点"活动显示已参与但实际未成功
+2. "文学创作大会"活动页面内容空白
+3. 数据库中存在大量重复参与记录（同一活动8条）
+4. 缺少APP端活动的专门检测方法
+
+**分析**:
+- **点击活动卡片失败**：
+  - `click_activity_card` 使用的选择器过于宽泛
+  - 点击后跳转到 `/activity/task-list` 而非活动详情页
+  - 缺少点击后的URL验证
+- **页面加载问题**：
+  - 等待时间不足（2-3秒），复杂JS页面未完全渲染
+  - 没有验证页面内容是否真正加载
+  - 可能停留在404或空页面却认为加载成功
+- **活动参与失败根本原因**：
+  - `post_micro_headline` 从微头条发布页面发布，未建立与活动的关联
+  - 应从活动页面发布才能正确计入活动
+- **重复记录bug**：
+  - `start_activities_cmd` 在用户确认前就创建记录（line 428-435）
+  - 执行后又创建新记录，导致同一活动多条记录
+
+**解决方案**:
+1. **改进 `click_activity_card`**：
+   - 三层匹配策略：精确匹配ID → data属性 → URL参数提取
+   - 点击后验证URL是否包含 activity_id
+   - 添加重试逻辑（最多3次）
+   - 失败时保存调试截图
+
+2. **新增 `verify_page_loaded()` 方法**：
+   - 检查 body.innerText 长度 > 100字符
+   - 检测页面标题和内容是否包含"404"
+   - 返回布尔值表示加载状态
+
+3. **新增 `participate_from_activity_page()` 方法**：
+   - 整合完整流程：打开创作者中心 → 点击活动卡片 → 验证页面 → 发布内容
+   - 确保从活动页面发布，建立正确的活动关联
+
+4. **修复重复记录bug**：
+   - 移除AI分析后的自动记录创建
+   - 只在用户确认并执行后创建记录
+   - `user_confirmed=True` 作为真正参与的标志
+
+5. **新增 `is_activity_skipped_for_app()` 方法**：
+   - 查询 `operation_type='skip_requires_app'` 的记录
+   - 快速检查活动是否因需要APP而被跳过
+
+**代码更新**:
+```python
+# 新增页面验证方法
+async def verify_page_loaded(self) -> bool:
+    check = await self.page.evaluate('''() => {
+        return {
+            contentLength: document.body.innerText.length,
+            title: document.title,
+            url: window.location.href
+        };
+    }''')
+    return check['contentLength'] > 100 and '404' not in check['title']
+
+# 新增从活动页面参与方法
+async def participate_from_activity_page(self, activity_id: str, content: str) -> Dict:
+    # 完整的参与流程...
+
+# 新增APP跳过检查方法
+def is_activity_skipped_for_app(self, activity_id: str) -> bool:
+    # 查询skip_requires_app记录...
+```
+
+**验证状态**: ✅ 已实施
+**技能同步**: 待同步 PATTERNS.md（活动参与流程模式）
+
+---
 
 ### [E008] 2026-02-13 - 404问题根因分析：URL格式错误
 

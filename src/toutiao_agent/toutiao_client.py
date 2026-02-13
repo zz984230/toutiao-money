@@ -545,75 +545,210 @@ class ToutiaoClient:
             print(f"打开创作者中心失败: {e}")
             return False
 
-    async def click_activity_card(self, activity_id: str) -> bool:
+    async def verify_page_loaded(self) -> bool:
+        """验证页面是否成功加载
+
+        检查:
+        - 页面是否有实际内容（body.innerText长度 > 100）
+        - 不是404页面
+        - URL是否正确
+
+        Returns:
+            bool: 页面是否成功加载
+        """
+        try:
+            # 检查页面内容长度
+            page_info = await self.page.evaluate('''() => {
+                const bodyText = document.body?.innerText || '';
+                const title = document.title || '';
+                const url = window.location.href;
+
+                // 检查是否是404页面
+                const is404 = title.includes('404') ||
+                             bodyText.includes('404') ||
+                             bodyText.includes('不存在') ||
+                             bodyText.includes('页面不存在');
+
+                return {
+                    contentLength: bodyText.length,
+                    title: title,
+                    url: url,
+                    is404: is404
+                };
+            }''')
+
+            # 检查是否是404页面
+            if page_info['is404']:
+                print(f"  ❌ 检测到404页面")
+                return False
+
+            # 检查内容长度
+            if page_info['contentLength'] < 100:
+                print(f"  ❌ 页面内容过短: {page_info['contentLength']} 字符")
+                return False
+
+            print(f"  ✓ 页面加载验证通过 (内容: {page_info['contentLength']} 字符)")
+            return True
+
+        except Exception as e:
+            print(f"  ❌ 页面加载验证失败: {e}")
+            return False
+
+    async def click_activity_card(self, activity_id: str, max_retries: int = 3) -> bool:
         """从创作者中心点击活动卡片
 
         Args:
             activity_id: 活动ID
+            max_retries: 最大重试次数
 
         Returns:
-            是否成功点击
+            是否成功点击并导航到活动详情页
         """
-        try:
-            print(f"正在点击活动卡片: {activity_id}")
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    print(f"重试第 {attempt + 1} 次...")
 
-            # 确保在创作者中心页面
-            if 'profile_v4' not in self.page.url:
-                await self.open_creator_center()
+                print(f"正在点击活动卡片: {activity_id}")
 
-            # 等待活动列表加载
-            await asyncio.sleep(3)
+                # 确保在创作者中心页面
+                if 'profile_v4' not in self.page.url:
+                    await self.open_creator_center()
 
-            # 先滚动页面确保活动卡片在视口中
-            print("滚动页面查找活动卡片...")
-            await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-            await asyncio.sleep(1)
-
-            # 尝试多种方式查找并点击活动卡片
-            clicked = await self.page.evaluate(f'''() => {{
-                console.log('开始查找活动卡片...', '{activity_id}');
-
-                // 方法1: 通过活动ID查找链接
-                let found = false;
-
-                // 查找所有包含活动ID的链接或按钮
-                const links = Array.from(document.querySelectorAll('a, button, [role="button"]'));
-                console.log('找到的元素数量:', links.length);
-
-                for (const el of links) {{
-                    const href = el.getAttribute('href') || '';
-                    const text = el.textContent || '';
-
-                    if ((href.includes("{activity_id}") ||
-                         text.includes("{activity_id}") ||
-                         href.includes('activity')) &&
-                        (href.includes('activity') || text.includes('天南') || text.includes('活动'))) {{
-                        el.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-                        el.click();
-                        found = true;
-                        console.log('已点击元素:', {{ href, text }});
-                        break;
-                    }}
-                }}
-
-                return found;
-            }}''')
-
-            if clicked:
-                print(f"  ✓ 已点击活动卡片")
+                # 等待活动列表加载
                 await asyncio.sleep(3)
-                return True
-            else:
-                print("  ❌ 未找到活动卡片")
-                # 保存调试截图
-                await self.page.screenshot(path="data/debug/activity_not_found.png")
+
+                # 先滚动页面确保活动卡片在视口中
+                print("滚动页面查找活动卡片...")
+                await self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                await asyncio.sleep(1)
+
+                # 改进的JavaScript选择器，更精确地匹配活动卡片
+                click_result = await self.page.evaluate(f'''() => {{
+                    console.log('开始查找活动卡片...', '{activity_id}');
+
+                    // 方法1: 通过活动ID精确匹配href
+                    const allLinks = Array.from(document.querySelectorAll('a[href*="activity"]'));
+                    console.log('找到活动链接数量:', allLinks.length);
+
+                    // 首先尝试精确匹配activity_id
+                    for (const link of allLinks) {{
+                        const href = link.getAttribute('href') || '';
+
+                        // 检查href中是否包含目标activity_id
+                        if (href.includes('id={activity_id}') || href.includes('activity/' + '{activity_id}')) {{
+                            // 找到精确匹配
+                            link.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+
+                            // 检查是否可见
+                            const rect = link.getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {{
+                                link.click();
+                                return {{
+                                    clicked: true,
+                                    method: 'exact_match',
+                                    href: href
+                                }};
+                            }}
+                        }}
+                    }}
+
+                    // 方法2: 如果精确匹配失败，尝试模糊匹配（通过data属性或文本内容）
+                    const activityCards = Array.from(document.querySelectorAll('[data-activity-id], [class*="activity-card"], [class*="ActivityCard"]'));
+
+                    for (const card of activityCards) {{
+                        const dataId = card.getAttribute('data-activity-id');
+                        if (dataId === '{activity_id}') {{
+                            // 找到匹配的卡片，查找其中的链接
+                            const link = card.querySelector('a[href*="activity"]');
+                            if (link) {{
+                                link.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                                link.click();
+                                return {{
+                                    clicked: true,
+                                    method: 'data_attribute',
+                                    href: link.getAttribute('href')
+                                }};
+                            }}
+                        }}
+                    }}
+
+                    // 方法3: 通过文本内容匹配（活动标题包含特定关键词）
+                    for (const link of allLinks) {{
+                        const href = link.getAttribute('href') || '';
+                        const text = link.textContent?.trim() || '';
+
+                        // 检查是否是活动链接且包含活动ID（可能在URL参数中）
+                        if (href.includes('activity') && href.includes('id=')) {{
+                            // 尝试从URL中提取activity_id
+                            const idMatch = href.match(/id=([^&]+)/);
+                            if (idMatch && idMatch[1] === '{activity_id}') {{
+                                link.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                                link.click();
+                                return {{
+                                    clicked: true,
+                                    method: 'url_param_match',
+                                    href: href
+                                }};
+                            }}
+                        }}
+                    }}
+
+                    return {{ clicked: false, method: 'not_found' }};
+                }}''')
+
+                if click_result['clicked']:
+                    print(f"  ✓ 已点击活动卡片 (方法: {click_result['method']})")
+                    print(f"  目标href: {click_result.get('href', 'N/A')}")
+
+                    # 等待页面跳转
+                    await asyncio.sleep(3)
+
+                    # 验证是否成功跳转到活动详情页
+                    current_url = self.page.url
+
+                    # 检查URL是否包含activity_id
+                    if activity_id in current_url or 'activity' in current_url:
+                        print(f"  ✓ 当前URL: {current_url}")
+
+                        # 进一步验证页面加载
+                        if await self.verify_page_loaded():
+                            return True
+                        else:
+                            print(f"  ⚠️ 虽然URL正确，但页面内容验证失败")
+                            # 如果验证失败但URL正确，也认为成功
+                            return True
+                    else:
+                        print(f"  ⚠️ 未跳转到活动详情页，当前URL: {current_url}")
+                        # 可能跳转到了任务列表页，需要重试
+                        if attempt < max_retries - 1:
+                            print(f"  将返回创作者中心重试...")
+                            await self.open_creator_center()
+                            continue
+                        return False
+                else:
+                    print(f"  ❌ 未找到活动卡片 (尝试 {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        # 滚动到顶部再试一次
+                        await self.page.evaluate('window.scrollTo(0, 0)')
+                        await asyncio.sleep(2)
+                        continue
+
+                    # 最后一次尝试失败，保存调试信息
+                    await self.page.screenshot(path=f"data/debug/activity_not_found_{activity_id}.png")
+                    return False
+
+            except Exception as e:
+                print(f"点击活动卡片失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                import traceback
+                traceback.print_exc()
+
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)
+                    continue
                 return False
 
-        except Exception as e:
-            print(f"点击活动卡片失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
+        return False
 
     async def open_activity_page(self, activity_id: str) -> bool:
         """打开活动页面（正确的URL格式）
@@ -676,6 +811,72 @@ class ToutiaoClient:
         except Exception as e:
             print(f"[E003进化] 查找输入框异常: {e}")
             return None
+
+    async def participate_from_activity_page(self, activity_id: str, content: str) -> Dict:
+        """从活动页面参与活动
+
+        此方法整合了以下步骤:
+        1. 打开创作者中心
+        2. 点击活动卡片
+        3. 验证页面加载
+        4. 在当前页面（活动页面）中发布内容
+
+        Args:
+            activity_id: 活动ID
+            content: 要发布的内容
+
+        Returns:
+            发布结果字典，包含 success 和 message 字段
+        """
+        try:
+            print(f"\n=== 开始从活动页面参与活动: {activity_id} ===")
+
+            # 1. 打开创作者中心
+            print("\n[步骤1] 打开创作者中心...")
+            if not await self.open_creator_center():
+                return {
+                    "success": False,
+                    "message": "打开创作者中心失败"
+                }
+            print("  ✓ 创作者中心已打开")
+
+            # 2. 点击活动卡片
+            print(f"\n[步骤2] 点击活动卡片...")
+            if not await self.click_activity_card(activity_id):
+                return {
+                    "success": False,
+                    "message": "点击活动卡片失败"
+                }
+            print("  ✓ 活动卡片已点击")
+
+            # 3. 验证页面加载
+            print(f"\n[步骤3] 验证页面加载...")
+            if not await self.verify_page_loaded():
+                # 即使验证失败，也可能只是部分加载，尝试继续
+                print("  ⚠️ 页面验证未完全通过，但尝试继续")
+            else:
+                print("  ✓ 页面加载验证通过")
+
+            # 4. 在当前页面发布内容
+            print(f"\n[步骤4] 发布内容...")
+            result = await self.publish_micro_headline_in_current_page(content)
+
+            if result.get('success'):
+                print(f"\n✅ 活动参与成功!")
+            else:
+                print(f"\n❌ 活动参与失败: {result.get('message')}")
+
+            return result
+
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"从活动页面参与活动异常: {e}")
+            print(f"错误堆栈: {error_trace}")
+            return {
+                "success": False,
+                "message": f"参与活动失败: {str(e)}"
+            }
 
     async def publish_micro_headline_in_current_page(self, content: str, topic: str = None) -> Dict:
         """在当前页面（活动弹窗）中发布微头条

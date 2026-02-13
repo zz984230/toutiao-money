@@ -424,15 +424,9 @@ def start_activities_cmd(count):
                 print(f"置信度: {result.confidence:.0%}")
                 print(f"建议: {result.suggested_action}")
 
-                # 记录分析结果到数据库
-                storage.add_activity_participation(
-                    activity_id=str(activity.activity_id),
-                    activity_title=activity.title,
-                    operation_type=result.operation_type.value,
-                    confidence=result.confidence,
-                    ai_analysis=result.to_dict(),
-                    user_confirmed=False
-                )
+                # 记录分析结果到数据库（仅在用户确认后创建记录，或者临时保存分析结果）
+                # 这里只保存分析结果，不创建参与记录
+                # 参与记录将在用户确认并执行后才创建
 
                 # 确认操作方式
                 if config.behavior.get('confirmation_mode', True):
@@ -511,7 +505,7 @@ def start_activities_cmd(count):
                             topic=f"#{hashtag}#" if hashtag else None
                         )
 
-                        # 更新参与记录
+                        # 只在用户确认并执行后才创建参与记录
                         storage.add_activity_participation(
                             activity_id=str(activity.activity_id),
                             activity_title=activity.title,
@@ -535,16 +529,21 @@ def start_activities_cmd(count):
                 else:
                     print(f"\n暂未实现操作类型: {operation.label}")
                     print("请手动参与活动或选择生成原创内容方式")
-                    # 更新参与记录
-                    storage.add_activity_participation(
-                        activity_id=str(activity.activity_id),
-                        activity_title=activity.title,
-                        operation_type=operation.value,
-                        confidence=0.0,
-                        ai_analysis=None,
-                        user_confirmed=True,
-                        execution_result='not_implemented'
-                    )
+
+                    # 记录跳过的活动（未实现的操作类型）
+                    if config.behavior.get('confirmation_mode', True):
+                        skip_confirm = input("\n是否记录此活动为已跳过? (y/n): ").strip().lower()
+                        if skip_confirm == 'y':
+                            storage.add_activity_participation(
+                                activity_id=str(activity.activity_id),
+                                activity_title=activity.title,
+                                operation_type='not_implemented',
+                                confidence=0.0,
+                                ai_analysis=None,
+                                user_confirmed=True,
+                                execution_result='skipped'
+                            )
+                            print("  ✓ 已记录为已跳过")
 
         finally:
             await agent.close()
