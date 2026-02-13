@@ -139,7 +139,9 @@ Cookie过期/未登录 → 重新执行登录流程，保存新cookie
 活动已结束 → 跳过，记录状态
 需要APP → 标记为低优先级
 内容审核 → 调整内容策略后重试
-页面404/加载失败 → 检查登录状态，使用 ToutiaoClient 重试
+页面404/加载失败 → 先检查URL格式是否正确，再重试
+  - 活动：确保使用 activity.href
+  - 新闻：确保使用 www.toutiao.com/article/{id}/ 格式
 未知错误 → 截图保存，咨询用户
 ```
 
@@ -176,8 +178,30 @@ await client.close()  # 自动保存 cookie
 - 如需使用 playwright-cli，必须先加载 cookie 状态：
   ```bash
   playwright-cli state-load data/cookies.json
-  playwright-cli open "https://m.toutiao.com/is/1856267285707785/"
   ```
+
+### URL 格式规范（E008进化）
+
+**⚠️ 常见错误：直接构造URL会导致404**
+
+| 资源类型 | ❌ 错误格式 | ✅ 正确格式 |
+|---------|-------------|-------------|
+| 活动页面 | `https://m.toutiao.com/is/{id}/` | 使用 `activity.href` 字段 |
+| 新闻详情 | `https://m.toutiao.com/i/{id}/` | `https://www.toutiao.com/article/{id}/` |
+
+**正确做法**：
+```python
+# 活动访问 - 使用API返回的href
+activities = activity_fetcher.fetch_activities(limit=10)
+activity_url = activities[0].href  # ✅ 正确
+
+# 新闻详情 - 使用正确格式
+news_url = f"https://www.toutiao.com/article/{article_id}/"  # ✅ 正确
+```
+
+**href字段可能的格式**：
+- `https://mp.toutiao.com/profile_v3_public/public/activity/?id={activity_id}`（创作者中心活动页）
+- `https://api.toutiaoapi.com/magic/eco/runtime/release/...`（活动运行时页面）
 
 ### 工具选择指南
 

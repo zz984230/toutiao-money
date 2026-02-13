@@ -4,14 +4,53 @@
 
 ## 进化统计
 
-- 总进化次数: 7
-- 成功解决问题: 7
+- 总进化次数: 8
+- 成功解决问题: 8
 - 新增活动模式: 2
 - 上次进化: 2026-02-13
 
 ---
 
 ## 最近进化
+
+### [E008] 2026-02-13 - 404问题根因分析：URL格式错误
+
+**触发**: 用户主动反馈
+
+**问题**:
+- 访问活动详情页 `https://m.toutiao.com/is/{activity_id}/` 返回404
+- 访问新闻详情页 `https://m.toutiao.com/i/{article_id}/` 返回404
+- 直接构造的URL格式不正确，导致无法访问页面
+
+**分析**:
+- **活动URL格式问题**：
+  - 错误格式：`https://m.toutiao.com/is/{activity_id}/`
+  - 正确来源：活动API返回的 `href` 字段
+  - 正确格式1：`https://mp.toutiao.com/profile_v3_public/public/activity/?id={activity_id}`
+  - 正确格式2：`https://api.toutiaoapi.com/magic/eco/runtime/release/...`
+- **新闻详情URL格式问题**：
+  - 错误格式：`https://m.toutiao.com/i/{article_id}/`
+  - 正确格式：`https://www.toutiao.com/article/{article_id}/`
+- **根本原因**：直接构造移动端URL缺少必要的参数和会话上下文
+
+**解决方案**:
+1. **活动访问**：必须使用 `activity.href` 字段，而非构造URL
+2. **新闻详情**：使用 `https://www.toutiao.com/article/{article_id}/` 格式
+3. **代码更新**：
+   ```python
+   # 正确的活动访问方式
+   activities = activity_fetcher.fetch_activities(limit=10)
+   activity_url = activities[0].href  # 使用API返回的href
+
+   # 正确的新闻访问方式
+   news_url = f"https://www.toutiao.com/article/{article_id}/"
+   ```
+4. 更新 SKILL.md：添加URL格式错误示例和正确格式说明
+
+**验证状态**: ✅ 已验证（正确URL可成功访问）
+**技能同步**: 已同步 EVOLUTION.md
+
+---
 
 ### [E007] 2026-02-13 - 需要APP的活动记录与跳过机制
 
