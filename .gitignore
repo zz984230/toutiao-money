@@ -27,9 +27,9 @@ data/cookies.json
 # Playwright CLI 缓存
 .playwright-cli/
 
-# 调试截图（临时文件）
-*.png
-activity_*.png
-
 # 临时测试脚本
 test_*.py
+
+# 临时文件目录（探索截图、日志等）
+data/temp/
+*.log
