@@ -247,6 +247,77 @@ await client.participate_from_activity_page(activity_id, content)
 
 ---
 
+## 模式 10：话题标签格式规范 (E010)
+
+**特征**：
+- 活动参与需要添加话题标签
+- 话题标签必须严格匹配活动名称格式
+- 空格、标点等格式差异会导致系统无法识别
+
+**识别**：
+- 活动标题如"上头条 聊热点"中间有空格
+- 话题标签必须保留原格式：`#上头条 聊热点#`
+- 错误格式：`#上头条聊热点#`（缺少空格）
+
+**正确格式规则**：
+```
+话题标签格式：#{活动标题}#
+
+示例：
+- "上头条 聊热点" → "#上头条 聊热点#"
+- "天南地北大拜年" → "#天南地北大拜年#"
+- "写拜年语送祝福" → "#写拜年语送祝福#"
+- "上头条聊CBA" → "#上头条聊CBA#"
+```
+
+**代码实现**：
+```python
+def normalize_hashtag(activity_title: str) -> str:
+    """从活动标题生成标准格式的话题标签
+
+    Args:
+        activity_title: 活动标题，如 "上头条 聊热点"
+
+    Returns:
+        标准格式的话题标签，如 "#上头条 聊热点#"
+
+    注意:
+        - 保留原标题中的空格和标点符号
+        - 严格格式：#标题#
+    """
+    return f"#{activity_title.strip()}#"
+
+# 使用示例
+hashtag = normalize_hashtag("上头条 聊热点")
+# 返回: "#上头条 聊热点#"
+
+# 发布前验证
+def validate_hashtag(hashtag: str, activity_title: str) -> bool:
+    """验证话题标签格式是否正确"""
+    expected = normalize_hashtag(activity_title)
+    if hashtag != expected:
+        print(f"⚠️ 话题标签格式可能不正确")
+        print(f"  期望: {expected}")
+        print(f"  实际: {hashtag}")
+        return False
+    return True
+```
+
+**验证方法**：
+1. 发布前检查话题标签格式
+2. 对比活动标题确保完全匹配
+3. 保留空格和标点符号
+4. 使用 `validate_hashtag()` 函数验证
+
+**影响范围**：
+- 所有需要话题标签的活动
+- 特别是标题包含空格的活动
+- AI生成内容时需特别注意
+
+**频率**：每次参与活动时需要验证
+
+---
+
 ## 页面识别快速检查
 
 ```bash
