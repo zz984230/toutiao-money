@@ -259,3 +259,116 @@ if __name__ == "__main__":
 4. 优化内容生成提示词模板
 
 ---
+
+## E013 - 2026-02-15
+
+### 问题：微头条发布页面的发布助手遮罩层阻挡所有点击操作
+
+**场景**：在微头条发布页面 (`https://mp.toutiao.com/profile_v4/weitoutiao/publish`) 发布内容时，所有点击操作都被遮罩层阻挡
+
+**遇到的问题**：
+1. 页面加载后自动显示"发布助手"侧边抽屉 (`.byte-drawer-wrapper`)
+2. 遮罩层 (`.byte-drawer-mask`) 拦截所有点击事件
+3. 尝试点击编辑器 → 被阻挡
+4. 尝试点击折叠按钮 → 也被阻挡（递归问题）
+5. 使用 `click(force=True)` → 仍然被阻挡
+
+**遮罩层 HTML 结构**：
+```html
+<div class="byte-drawer-wrapper publish-assistant-old-drawer">
+  <div class="byte-drawer-mask fade-appear-done fade-enter-done"></div>
+  <div class="byte-drawer container-open slideRight-appear-done slideRight-enter-done">
+    <div class="byte-drawer-header">
+      <div class="drawer-title">
+        <span class="icon-wrap">
+          <svg class="byte-icon byte-icon-fold">...</svg>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**错误信息**：
+```
+ElementHandle.click: Timeout 30000ms exceeded.
+<byte-drawer-mask ...> subtree intercepts pointer events
+```
+
+### 解决方案
+
+**关键发现**：必须使用 JavaScript 直接移除 DOM 元素，不能尝试点击操作（连点击折叠按钮也会被遮罩拦截）
+
+**正确的处理顺序**：
+```python
+# 1. 访问页面
+await page.goto('https://mp.toutiao.com/profile_v4/weitoutiao/publish')
+await page.wait_for_load_state('networkidle')
+await page.wait_for_timeout(3000)
+
+# 2. 在任何点击操作之前，先用JavaScript移除整个抽屉包裹层
+removed = await page.evaluate('''() => {
+    // 移除整个抽屉包裹层
+    const wrapper = document.querySelector('.byte-drawer-wrapper');
+    if (wrapper) {
+        wrapper.remove();
+        return 'removed drawer wrapper';
+    }
+
+    // 备用：只移除遮罩层
+    const mask = document.querySelector('.byte-drawer-mask');
+    if (mask) {
+        mask.remove();
+        return 'removed mask';
+    }
+
+    return 'no element found';
+}''')
+
+print(f'移除结果: {removed}')
+await page.wait_for_timeout(1000)
+
+# 3. 现在可以安全地进行任何点击操作
+editor = await page.wait_for_selector('[contenteditable="true"]')
+await editor.click()  # 不会被阻挡
+await editor.fill(CONTENT)
+
+# 4. 点击发布按钮也使用JavaScript（绕过可能的遮罩残留）
+publish_btn = await page.wait_for_selector('button:has-text("发布")')
+await page.evaluate('(element) => element.dispatchEvent(new MouseEvent("click", {bubbles: true}))', publish_btn)
+```
+
+### 关键要点
+
+1. **时机很重要**：必须在任何点击操作之前移除遮罩
+2. **直接移除 DOM**：不要尝试点击折叠按钮（也会被遮罩拦截）
+3. **DOM 层级**：
+   - `.byte-drawer-wrapper` - 最外层包裹，移除它最干净
+   - `.byte-drawer-mask` - 遮罩层，也可以单独移除
+   - `.drawer-title .icon-wrap` - 折叠按钮（但点击会被拦截）
+4. **使用 JavaScript 点击**：发布按钮也建议使用 `dispatchEvent` 而非 Playwright 的 `click()`
+
+### 验证结果
+
+- ✅ 成功发布微头条：#大家都是怎样度过人生低谷期的#
+- ✅ 内容正常输入到编辑器
+- ✅ 发布按钮成功点击
+- ✅ 无遮罩层干扰
+
+### 需要同步的文件
+
+1. **更新 SKILL.md**：
+   - 在"编码注意事项"章节添加"微头条发布遮罩层问题"
+   - 包含完整的解决方案代码示例
+
+2. **后续脚本模板**：
+   - 所有微头条发布脚本必须遵循此模式
+   - 先移除遮罩，再进行任何操作
+
+### 后续优化方向
+
+1. 将遮罩处理逻辑封装为可复用函数
+2. 考虑在 ToutiaoClient 中集成自动遮罩处理
+3. 探索是否可以通过 CSS 隐藏遮罩而非移除 DOM
+
+---

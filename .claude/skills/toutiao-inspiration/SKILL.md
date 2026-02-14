@@ -195,6 +195,44 @@ Cookie过期/未登录 → 重新执行登录流程，保存新cookie
 2. **微头条发布页面**：https://mp.toutiao.com/profile_v4/weitoutiao/publish
    - 这是微头条发布的官方地址，需要通过 Playwright 访问并操作
 
+**微头条发布遮罩层问题（重要）**：
+3. **发布助手侧边抽屉遮罩问题**：
+   - 页面加载后会自动显示发布助手侧边抽屉 (`.byte-drawer-wrapper`)
+   - 遮罩层 (`.byte-drawer-mask`) 会阻止所有点击操作
+   - **解决方案**：在任何点击操作之前，先用JavaScript移除整个抽屉包裹层
+
+```python
+# 在访问页面后、任何操作前，立即执行移除
+await page.goto('https://mp.toutiao.com/profile_v4/weitoutiao/publish')
+await page.wait_for_load_state('networkidle')
+await page.wait_for_timeout(3000)
+
+# 先移除遮罩层（必须在做任何点击之前）
+removed = await page.evaluate('''() => {
+    const wrapper = document.querySelector('.byte-drawer-wrapper');
+    if (wrapper) {
+        wrapper.remove();
+        return 'removed drawer wrapper';
+    }
+    const mask = document.querySelector('.byte-drawer-mask');
+    if (mask) {
+        mask.remove();
+        return 'removed mask';
+    }
+    return 'no element found';
+}''')
+
+# 现在可以安全地进行点击操作
+editor = await page.wait_for_selector('[contenteditable="true"]')
+await editor.click()  # 不会被阻挡
+```
+
+**关键要点**：
+- 必须在**任何点击操作之前**移除遮罩
+- 使用JavaScript直接移除DOM元素，不要尝试点击折叠按钮（也会被阻挡）
+- 抽屉结构：`.byte-drawer-wrapper` > `.byte-drawer` > `.byte-drawer-mask`
+- 折叠按钮位置：`.drawer-title .icon-wrap` (但点击会被遮罩拦截)
+
 ## 自适应学习
 
 - 记录成功参与的话题模式
