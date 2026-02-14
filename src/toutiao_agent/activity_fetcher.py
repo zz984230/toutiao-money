@@ -185,11 +185,11 @@ class ActivityFetcher:
         result = self._make_request(url)
 
         if 'error' in result:
-            print(f"❌ 获取活动失败: {result['error']}")
+            print(f"[错误] 获取活动失败: {result['error']}")
             return []
 
         if result.get('code') != 0:
-            print(f"❌ API 错误: {result.get('message', '未知错误')}")
+            print(f"[错误] API 错误: {result.get('message', '未知错误')}")
             return []
 
         # 解析活动列表
@@ -220,7 +220,7 @@ class ActivityFetcher:
         result = self._make_request(url)
 
         if 'error' in result:
-            print(f"❌ 获取分类失败: {result['error']}")
+            print(f"[错误] 获取分类失败: {result['error']}")
             return ['全部']
 
         if result.get('code') != 0:

@@ -1,11 +1,20 @@
 """主模块 - CLI入口和业务逻辑"""
 
 import asyncio
+import sys
 import click
 from collections import Counter
 from pathlib import Path
 from typing import Optional
 from .config import config
+
+# 修复 Windows 终端中文编码问题
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
 from .toutiao_client import get_client, close_client, ToutiaoClient
 from .generator import generator
 from .activity_fetcher import activity_fetcher, Activity

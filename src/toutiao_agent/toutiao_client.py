@@ -987,7 +987,7 @@ class ToutiaoClient:
                         except:
                             continue
                 except Exception as e:
-                    print(f"  ⚠ 点击发布按钮时出错: {e}")
+                    print(f"  [警告] 点击发布按钮时出错: {e}")
 
             if not publish_clicked:
                 # 尝试使用快捷键
