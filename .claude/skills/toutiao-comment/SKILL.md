@@ -20,11 +20,11 @@ ls data/cookies.json || uv run toutiao-agent login
 ## 评论循环
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│ 登录检查 → 获取热点新闻 → 选择新闻 → 生成评论 → 交互确认 → 发布评论 → 验证记录 │
-│     ↑                                                                                    │
-│     └──────── 未登录时先执行登录流程 ─────────────────────────────────────────────────────┘
-└────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+│ 登录检查 → 获取热点新闻 → 选择新闻 → 获取详情 → 生成评论 → 交互确认 → 发布评论 → 验证记录 │
+│     ↑                                                                                        │
+│     └──────── 未登录时先执行登录流程 ────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -99,7 +99,37 @@ uv run python .claude/skills/toutiao-comment/scripts/get_hot_news.py
 
 ---
 
-## 3. 生成评论阶段
+## 3. 获取文章详情阶段（MUST DO）
+
+**生成评论前必须先获取文章详情！**
+
+仅根据标题生成评论可能脱离文章实际内容，必须先获取文章正文才能生成有针对性的评论。
+
+**使用 ToutiaoClient.get_article_detail() 方法**：
+
+```python
+from toutiao_agent.toutiao_client import ToutiaoClient
+
+client = ToutiaoClient()
+await client.start()
+
+try:
+    # 获取文章详情
+    detail = await client.get_article_detail(article_id)
+    # detail 包含：title, content（前500字）, url
+finally:
+    await client.close()
+```
+
+**为什么必须获取详情**：
+- 标题可能具有误导性或片面性
+- 评论需要针对文章具体内容而非仅标题
+- 避免生成与文章主旨不符的评论
+- 提高评论质量和相关性
+
+---
+
+## 4. 生成评论阶段
 
 根据选择的新闻，生成有观点、有立场的评论内容。
 
@@ -125,7 +155,7 @@ uv run python .claude/skills/toutiao-comment/scripts/get_hot_news.py
 
 ---
 
-## 4. 交互确认阶段（MUST FOLLOW）
+## 5. 交互确认阶段（MUST FOLLOW）
 
 **在执行任何评论发布命令前，必须使用 `AskUserQuestion` 工具与用户确认**：
 
@@ -150,7 +180,7 @@ uv run python .claude/skills/toutiao-comment/scripts/get_hot_news.py
 
 ---
 
-## 5. 发布评论阶段
+## 6. 发布评论阶段
 
 用户确认后，执行评论发布。
 
@@ -186,7 +216,7 @@ uv run python .claude/skills/toutiao-comment/scripts/publish_comment.py <article
 
 ---
 
-## 6. 验证与记录阶段
+## 7. 验证与记录阶段
 
 发布成功后：
 - 记录评论到 `storage.add_comment(article_id, content)`
