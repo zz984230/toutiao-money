@@ -52,9 +52,9 @@ class ToutiaoAgent:
             # 记录到数据库
             from .storage import storage
             storage.add_comment(article_id, title, url, content)
-            print(f"✅ 评论成功! 文章ID: {article_id}")
+            print(f"[成功] 评论成功! 文章ID: {article_id}")
         else:
-            print(f"❌ 评论失败: {result.get('error', '未知错误')}")
+            print(f"[失败] 评论失败: {result.get('error', '未知错误')}")
         return result
 
     async def post_micro_headline(
@@ -88,9 +88,9 @@ class ToutiaoAgent:
                 hashtags=hashtags,
                 images=images_json
             )
-            print(f"✅ 微头条发布成功!")
+            print(f"[成功] 微头条发布成功!")
         else:
-            print(f"❌ 微头条发布失败: {result.get('message', result.get('error', '未知错误'))}")
+            print(f"[失败] 微头条发布失败: {result.get('message', result.get('error', '未知错误'))}")
 
         return result
 
@@ -221,7 +221,7 @@ def history_cmd(limit):
 
     click.echo(f"\n最近 {len(records)} 条评论:\n")
     for r in records:
-        click.echo(f"📅 {r['created_at']}")
+        click.echo(f"[日期] {r['created_at']}")
         click.echo(f"   文章: {r['title'][:50]}...")
         click.echo(f"   评论: {r['content'][:50]}...")
         click.echo(f"   ID: {r['article_id']}\n")
@@ -233,7 +233,7 @@ def stats_cmd():
     from .storage import storage
 
     count = storage.get_comment_count()
-    click.echo(f"\n📊 评论统计:")
+    click.echo(f"\n[统计] 评论统计:")
     click.echo(f"   总评论数: {count}")
     click.echo(f"   数据库: {config.storage.get('db_file')}\n")
 
@@ -291,9 +291,9 @@ def micro_headlines_cmd(limit):
         click.echo("暂无微头条记录")
         return
 
-    click.echo(f"\n📝 最近 {len(records)} 条微头条:\n")
+    click.echo(f"\n[微头条] 最近 {len(records)} 条微头条:\n")
     for r in records:
-        click.echo(f"📅 {r['created_at']}")
+        click.echo(f"[日期] {r['created_at']}")
         if r['activity_title']:
             click.echo(f"   活动: {r['activity_title']}")
         click.echo(f"   内容: {r['content'][:80]}{'...' if len(r['content']) > 80 else ''}")
@@ -308,7 +308,7 @@ def micro_stats_cmd():
     from .storage import storage
 
     count = storage.get_micro_headline_count()
-    click.echo(f"\n📊 微头条统计:")
+    click.echo(f"\n[统计] 微头条统计:")
     click.echo(f"   总发布数: {count}\n")
 
 
@@ -566,12 +566,12 @@ def activity_history_cmd(limit):
     from .activity_types import OperationType
 
     for r in records:
-        click.echo(f"📅 {r['created_at']}")
+        click.echo(f"[日期] {r['created_at']}")
         if r['activity_title']:
             click.echo(f"   活动: {r['activity_title'][:50]}...")
         click.echo(f"   操作类型: {r['operation_type']}")
         click.echo(f"   置信度: {r['confidence'] * 100:.0f}%")
-        click.echo(f"   用户确认: {'✅' if r['user_confirmed'] else '❌'}")
+        click.echo(f"   用户确认: {'[是]' if r['user_confirmed'] else '[否]'}")
         if r['execution_result']:
             click.echo(f"   结果: {r['execution_result']}")
         click.echo()
@@ -594,7 +594,7 @@ def activity_stats_cmd():
     # 按操作类型统计
     type_counts = Counter(r['operation_type'] for r in records)
 
-    click.echo(f"\n📊 活动参与统计:\n")
+    click.echo(f"\n[统计] 活动参与统计:\n")
     click.echo(f"   总参与次数: {total}")
     click.echo(f"   用户确认: {confirmed}")
     click.echo(f"   平均置信度: {avg_confidence * 100:.1f}%")

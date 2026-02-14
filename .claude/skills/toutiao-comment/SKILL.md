@@ -52,7 +52,7 @@ uv run toutiao-agent hot-news --limit 1
 
 ## 1. 获取热点新闻阶段
 
-从头条首页【热点】标签下获取热点新闻。
+从头条首页【热点】标签下获取热点新闻。【热点】标签位置：<div class="feed-default-nav-item active">热点</div>
 
 **运行脚本**：
 ```bash
