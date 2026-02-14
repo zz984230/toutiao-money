@@ -89,7 +89,7 @@ class ToutiaoClient:
         )
 
         if has_login_cookie:
-            print(f"  ✓ 检测到登录 Cookie")
+            print(f"  [OK] 检测到登录 Cookie")
             return True
 
         # 2. 检查 localStorage 中的登录数据（辅助指标）
@@ -101,13 +101,13 @@ class ToutiaoClient:
         }''')
 
         if local_storage['hasUserId']:
-            print(f"  ✓ 检测到 localStorage 登录数据")
+            print(f"  [OK] 检测到 localStorage 登录数据")
 
             # localStorage 有数据，但等待 Cookie 更新
             await asyncio.sleep(2)
             cookies = await self.context.cookies()
             if any(any(c.get('name') == name for c in cookies) for name in login_cookie_names):
-                print(f"  ✓ Cookie 已更新")
+                print(f"  [OK] Cookie 已更新")
                 return True
 
         # 3. 检查页面状态（备用）
@@ -191,7 +191,7 @@ class ToutiaoClient:
                 print("  未找到登录按钮，可能已登录")
                 return await self.check_login_status()
 
-            print("  ✓ 已点击登录按钮")
+            print("  [OK] 已点击登录按钮")
 
             # 等待登录弹窗完全加载
             await asyncio.sleep(5)
@@ -201,7 +201,7 @@ class ToutiaoClient:
             try:
                 await self.page.wait_for_selector('[aria-label="账密登录"]', timeout=10000)
             except Exception:
-                print("  ❌ 账密登录选项加载超时")
+                print("  [ERROR] 账密登录选项加载超时")
                 await self.page.screenshot(path="debug/debug_wait_account_login.png")
                 return False
 
@@ -211,7 +211,7 @@ class ToutiaoClient:
             if account_login_btn:
                 try:
                     await account_login_btn.click(force=True, timeout=5000)
-                    print("  ✓ 已点击账密登录 (Playwright)")
+                    print("  [OK] 已点击账密登录 (Playwright)")
                 except Exception as e:
                     # 降级到JavaScript点击
                     js_result = await self.page.evaluate('''() => {
@@ -226,13 +226,13 @@ class ToutiaoClient:
                     }''')
 
                     if js_result.get('clicked'):
-                        print("  ✓ 已点击账密登录 (JavaScript)")
+                        print("  [OK] 已点击账密登录 (JavaScript)")
                     else:
-                        print("  ❌ 点击账密登录失败")
+                        print("  [ERROR] 点击账密登录失败")
                         await self.page.screenshot(path="debug/debug_account_login_failed.png")
                         return False
             else:
-                print("  ❌ 未找到账密登录选项")
+                print("  [ERROR] 未找到账密登录选项")
                 await self.page.screenshot(path="debug/debug_no_account_login.png")
                 return False
 
@@ -262,9 +262,9 @@ class ToutiaoClient:
             }}''')
 
             if phone_filled.get('filled'):
-                print(f"  ✓ 已填写手机号 ({phone_filled.get('selector')})")
+                print(f"  [OK] 已填写手机号 ({phone_filled.get('selector')})")
             else:
-                print("  ❌ 未找到手机号输入框")
+                print("  [ERROR] 未找到手机号输入框")
                 await self.page.screenshot(path="debug/debug_no_phone_input.png")
                 return False
 
@@ -292,9 +292,9 @@ class ToutiaoClient:
             }'''.replace('__PASSWORD__', password))
 
             if password_filled.get('filled'):
-                print(f"  ✓ 已填写密码 ({password_filled.get('selector')})")
+                print(f"  [OK] 已填写密码 ({password_filled.get('selector')})")
             else:
-                print("  ❌ 未找到密码输入框")
+                print("  [ERROR] 未找到密码输入框")
                 await self.page.screenshot(path="debug/debug_no_password_input.png")
                 return False
 
@@ -314,9 +314,9 @@ class ToutiaoClient:
             }''')
 
             if submit_clicked.get('clicked'):
-                print("  ✓ 已点击登录按钮")
+                print("  [OK] 已点击登录按钮")
             else:
-                print("  ❌ 未找到登录按钮")
+                print("  [ERROR] 未找到登录按钮")
                 await self.page.screenshot(path="debug/debug_no_submit_btn.png")
                 return False
 
@@ -326,7 +326,7 @@ class ToutiaoClient:
 
             # 检查是否登录成功（使用 Cookie 和页面元素检查）
             if await self._check_login_success():
-                print("  ✅ 登录成功!")
+                print("  [SUCCESS] 登录成功!")
                 return True
             else:
                 current_url = self.page.url
@@ -338,27 +338,27 @@ class ToutiaoClient:
                 for i in range(30):
                     await asyncio.sleep(1)
                     if await self._check_login_success():
-                        print("  ✅ 登录成功!")
+                        print("  [SUCCESS] 登录成功!")
                         return True
 
-                print("  ❌ 登录超时，验证未完成")
+                print("  [ERROR] 登录超时，验证未完成")
                 return False
 
         except Exception as e:
-            print(f"❌ 登录失败: {e}")
+            print(f"[ERROR] 登录失败: {e}")
             return False
 
     async def ensure_login(self) -> bool:
         """确保已登录（先检查Cookie，未登录则尝试账号密码登录）"""
         # 先检查是否已登录
         if await self.check_login_status():
-            print("✅ 已登录（使用已保存的Cookie）")
+            print("[SUCCESS] 已登录（使用已保存的Cookie）")
             return True
 
         # 未登录，尝试使用账号密码登录
         username, password = config.get_toutiao_credentials()
         if not username or not password:
-            print("❌ 未配置账号密码，请在.env文件中设置 TOUTIAO_USERNAME 和 TOUTIAO_PASSWORD")
+            print("[ERROR] 未配置账号密码，请在.env文件中设置 TOUTIAO_USERNAME 和 TOUTIAO_PASSWORD")
             return False
 
         # 登录前先设置headless=False，让用户可以看到浏览器操作
@@ -579,19 +579,19 @@ class ToutiaoClient:
 
             # 检查是否是404页面
             if page_info['is404']:
-                print(f"  ❌ 检测到404页面")
+                print(f"  [ERROR] 检测到404页面")
                 return False
 
             # 检查内容长度
             if page_info['contentLength'] < 100:
-                print(f"  ❌ 页面内容过短: {page_info['contentLength']} 字符")
+                print(f"  [ERROR] 页面内容过短: {page_info['contentLength']} 字符")
                 return False
 
-            print(f"  ✓ 页面加载验证通过 (内容: {page_info['contentLength']} 字符)")
+            print(f"  [OK] 页面加载验证通过 (内容: {page_info['contentLength']} 字符)")
             return True
 
         except Exception as e:
-            print(f"  ❌ 页面加载验证失败: {e}")
+            print(f"  [ERROR] 页面加载验证失败: {e}")
             return False
 
     async def click_activity_card(self, activity_id: str, max_retries: int = 3) -> bool:
@@ -698,7 +698,7 @@ class ToutiaoClient:
                 }}''')
 
                 if click_result['clicked']:
-                    print(f"  ✓ 已点击活动卡片 (方法: {click_result['method']})")
+                    print(f"  [OK] 已点击活动卡片 (方法: {click_result['method']})")
                     print(f"  目标href: {click_result.get('href', 'N/A')}")
 
                     # 等待页面跳转
@@ -709,17 +709,17 @@ class ToutiaoClient:
 
                     # 检查URL是否包含activity_id
                     if activity_id in current_url or 'activity' in current_url:
-                        print(f"  ✓ 当前URL: {current_url}")
+                        print(f"  [OK] 当前URL: {current_url}")
 
                         # 进一步验证页面加载
                         if await self.verify_page_loaded():
                             return True
                         else:
-                            print(f"  ⚠️ 虽然URL正确，但页面内容验证失败")
+                            print(f"  [WARN] 虽然URL正确，但页面内容验证失败")
                             # 如果验证失败但URL正确，也认为成功
                             return True
                     else:
-                        print(f"  ⚠️ 未跳转到活动详情页，当前URL: {current_url}")
+                        print(f"  [WARN] 未跳转到活动详情页，当前URL: {current_url}")
                         # 可能跳转到了任务列表页，需要重试
                         if attempt < max_retries - 1:
                             print(f"  将返回创作者中心重试...")
@@ -727,7 +727,7 @@ class ToutiaoClient:
                             continue
                         return False
                 else:
-                    print(f"  ❌ 未找到活动卡片 (尝试 {attempt + 1}/{max_retries})")
+                    print(f"  [ERROR] 未找到活动卡片 (尝试 {attempt + 1}/{max_retries})")
                     if attempt < max_retries - 1:
                         # 滚动到顶部再试一次
                         await self.page.evaluate('window.scrollTo(0, 0)')
@@ -753,7 +753,7 @@ class ToutiaoClient:
     async def open_activity_page(self, activity_id: str) -> bool:
         """打开活动页面（正确的URL格式）
 
-        ⚠️ E005进化警告：此方法可能不可靠！
+        [WARN] E005进化警告：此方法可能不可靠！
         直接访问活动URL可能返回404，因为头条有访问控制。
         推荐使用：open_creator_center() + click_activity_card()
         从创作者中心点击活动卡片会建立必要的会话上下文。
@@ -768,13 +768,13 @@ class ToutiaoClient:
             # 使用正确的活动页面URL格式
             activity_url = f"https://mp.toutiao.com/profile_v3_public/public/activity/?activity_location=panel_invite_discuss_hot_mp&id={activity_id}"
             print(f"正在访问活动页面: {activity_url}")
-            print("  ⚠️ 注意：如果返回404，请使用 open_creator_center() + click_activity_card()")
+            print("  [WARN] 注意：如果返回404，请使用 open_creator_center() + click_activity_card()")
 
             await self.page.goto(activity_url, timeout=30000)
             await self.page.wait_for_load_state('networkidle', timeout=15000)
             await asyncio.sleep(2)
 
-            print(f"  ✓ 当前URL: {self.page.url}")
+            print(f"  [OK] 当前URL: {self.page.url}")
             return True
 
         except Exception as e:
@@ -838,7 +838,7 @@ class ToutiaoClient:
                     "success": False,
                     "message": "打开创作者中心失败"
                 }
-            print("  ✓ 创作者中心已打开")
+            print("  [OK] 创作者中心已打开")
 
             # 2. 点击活动卡片
             print(f"\n[步骤2] 点击活动卡片...")
@@ -847,24 +847,24 @@ class ToutiaoClient:
                     "success": False,
                     "message": "点击活动卡片失败"
                 }
-            print("  ✓ 活动卡片已点击")
+            print("  [OK] 活动卡片已点击")
 
             # 3. 验证页面加载
             print(f"\n[步骤3] 验证页面加载...")
             if not await self.verify_page_loaded():
                 # 即使验证失败，也可能只是部分加载，尝试继续
-                print("  ⚠️ 页面验证未完全通过，但尝试继续")
+                print("  [WARN] 页面验证未完全通过，但尝试继续")
             else:
-                print("  ✓ 页面加载验证通过")
+                print("  [OK] 页面加载验证通过")
 
             # 4. 在当前页面发布内容
             print(f"\n[步骤4] 发布内容...")
             result = await self.publish_micro_headline_in_current_page(content)
 
             if result.get('success'):
-                print(f"\n✅ 活动参与成功!")
+                print(f"\n[SUCCESS] 活动参与成功!")
             else:
-                print(f"\n❌ 活动参与失败: {result.get('message')}")
+                print(f"\n[ERROR] 活动参与失败: {result.get('message')}")
 
             return result
 
@@ -912,7 +912,7 @@ class ToutiaoClient:
                         await editable.fill(content)
                         await asyncio.sleep(2)
                         input_found = True
-                        print("  ✓ 已填写内容到 contenteditable 元素")
+                        print("  [OK] 已填写内容到 contenteditable 元素")
                         break
                 except:
                     continue
@@ -929,7 +929,7 @@ class ToutiaoClient:
                             await textarea.fill(content)
                             await asyncio.sleep(2)
                             input_found = True
-                            print("  ✓ 已填写内容到 textarea 元素")
+                            print("  [OK] 已填写内容到 textarea 元素")
                             break
                     except:
                         continue
@@ -963,7 +963,7 @@ class ToutiaoClient:
             }''')
 
             if button_result.get('found'):
-                print(f"  ✓ 找到发布按钮: {button_result.get('text')}")
+                print(f"  [OK] 找到发布按钮: {button_result.get('text')}")
 
                 # 通过选择器点击
                 try:
@@ -982,7 +982,7 @@ class ToutiaoClient:
                             if await btn.count() > 0:
                                 await btn.click()
                                 publish_clicked = True
-                                print("  ✓ 已点击发布按钮")
+                                print("  [OK] 已点击发布按钮")
                                 break
                         except:
                             continue
