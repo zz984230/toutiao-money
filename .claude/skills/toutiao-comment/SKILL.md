@@ -319,6 +319,14 @@ await client.start()  # 自动加载 data/cookies.json
 await client.close()  # 自动保存 cookie
 ```
 
+### 页面信息获取规则
+
+**禁止直接使用 Playwright 代码生成命令**：
+- 不要使用 `uv run playwright codegen` 来获取页面信息
+- 不要使用 `uv run playwright <其他命令>` 直接操作浏览器
+- **原因**：这些命令会启动新的浏览器实例，无法复用已保存的 Cookie，导致需要重新登录
+- **正确做法**：使用 `toutiao-agent` 命令或直接调用 `ToutiaoClient` 类
+
 ### 脚本说明
 
 - **get_hot_news.py**: 获取热点新闻列表
