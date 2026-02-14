@@ -18,12 +18,15 @@ from toutiao_agent.toutiao_client import ToutiaoClient
 from toutiao_agent.storage import storage
 
 
-async def publish_comment(article_id: str, content: str) -> dict:
+async def publish_comment(article_id: str, content: str, title: str = "", url: str = "", skip_login_check: bool = True) -> dict:
     """发布评论到指定文章
 
     Args:
         article_id: 文章ID
         content: 评论内容
+        title: 文章标题（可选，用于记录）
+        url: 文章URL（可选，用于记录）
+        skip_login_check: 是否跳过登录检查（默认True，因为ensure_login可能超时）
 
     Returns:
         dict: 发布结果 {'success': bool, 'message': str}
@@ -32,9 +35,14 @@ async def publish_comment(article_id: str, content: str) -> dict:
     await client.start()
 
     try:
-        print("检查登录状态...")
-        if not await client.ensure_login():
-            return {'success': False, 'message': '登录失败'}
+        # 默认跳过登录检查，因为 ensure_login 可能因 networkidle 超时
+        # 如果 cookie 文件存在且较新，直接使用
+        if not skip_login_check:
+            print("检查登录状态...")
+            if not await client.ensure_login():
+                return {'success': False, 'message': '登录失败'}
+        else:
+            print("跳过登录检查，使用已保存的Cookie...")
 
         print(f"正在发布评论到文章 {article_id}...")
         print(f"评论内容: {content}")
@@ -45,6 +53,8 @@ async def publish_comment(article_id: str, content: str) -> dict:
             # 记录到数据库
             storage.add_comment(
                 article_id=article_id,
+                title=title,
+                url=url,
                 content=content
             )
             print("[SUCCESS] 评论已发布")

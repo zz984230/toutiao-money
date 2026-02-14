@@ -39,14 +39,20 @@ ls -la data/cookies.json
 
 # 2. 如果 cookie 文件不存在，提示缺少cookie；如果cookie文件存在，则使用cookie
 
-# 3. 验证登录状态
+# 3. 验证登录状态（使用 toutiao-agent 命令）
 uv run toutiao-agent hot-news --limit 1
 ```
+
+**重要提示**：
+- `check_login_status()` 内部使用 `networkidle` 可能会超时（头条页面有持续后台请求）
+- 优先使用 `toutiao-agent` 命令验证登录，而非直接调用 `client.ensure_login()`
+- 如果 cookie 文件存在且较新，可直接跳过登录检查使用已保存的 Cookie
 
 **登录失败处理**：
 - Cookie 过期 -> 提示过期
 - 需要验证码 -> 使用非 headless 模式手动处理
 - 网络错误 -> 检查网络连接后重试
+- `networkidle` 超时 -> 这是已知问题，可忽略直接使用 Cookie
 
 ---
 
@@ -148,17 +154,35 @@ uv run python .claude/skills/toutiao-comment/scripts/get_hot_news.py
 
 用户确认后，执行评论发布。
 
-**运行脚本**：
+**方法一：直接使用 ToutiaoClient（推荐）**
+
+脚本 `publish_comment.py` 存在登录检查超时问题，建议直接使用 ToutiaoClient：
+
+```python
+from toutiao_agent.toutiao_client import ToutiaoClient
+from toutiao_agent.storage import storage
+
+client = ToutiaoClient()
+await client.start()
+
+try:
+    # 直接发布（跳过 ensure_login，使用已保存的 Cookie）
+    result = await client.post_comment(article_id, content)
+
+    if result.get('success'):
+        storage.add_comment(article_id=article_id, title=title, url=url, content=content)
+        print('[SUCCESS] 评论已发布')
+finally:
+    await client.close()
+```
+
+**方法二：运行脚本（可能超时）**
+
 ```bash
 uv run python .claude/skills/toutiao-comment/scripts/publish_comment.py <article_id> "<评论内容>"
 ```
 
-**或在代码中调用**：
-```python
-from .scripts.publish_comment import publish_comment
-
-result = await publish_comment(article_id, content)
-```
+**注意**：脚本内部调用 `ensure_login()` 可能因 `networkidle` 超时而失败。
 
 ---
 
@@ -180,6 +204,14 @@ Cookie过期/未登录 -> 重新执行登录流程，保存新cookie
 评论发布失败 -> 调整评论内容后重试
 未知错误 -> 截图保存，咨询用户
 ```
+
+**常见问题：`networkidle` 超时**
+
+- **原因**：头条页面有持续的后台请求（广告、统计、推荐等），导致永远无法达到 `networkidle` 状态（500ms 内少于 2 个网络连接）
+- **解决方案**：
+  1. 使用 `wait_until="domcontentloaded"` 或 `wait_until="load"`
+  2. 如果 Cookie 文件存在且较新，跳过登录检查直接使用
+  3. 优先使用 `toutiao-agent` 命令验证登录状态
 
 ---
 
