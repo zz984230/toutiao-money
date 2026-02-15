@@ -77,6 +77,10 @@ uv run toutiao-agent activities --limit 1
 - 使用 toutiao-agent 命令执行（发布微头条、参与活动等）
 - 使用 playwright-cli 处理复杂交互（点击按钮、填写表单）
 
+**微头条内容要求**：
+- 字数控制在 100-200 字（声明首发需要 100 字以上）
+- 内容开头或结尾必须包含话题标签 `#<话题>#`
+
 #### 🔴 关键安全确认环节（MUST FOLLOW）
 
 **在以下任何操作前，必须使用 `AskUserQuestion` 工具与用户确认**：
