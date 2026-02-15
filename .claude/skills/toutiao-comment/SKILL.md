@@ -245,10 +245,46 @@ Cookie过期/未登录 -> 重新执行登录流程，保存新cookie
 
 ---
 
+## 已知问题与解决方案
+
+### 2026-02-15: networkidle 超时问题
+
+**问题描述**：
+- `check_login_status()` 使用 `networkidle` 等待状态会超时
+- 头条页面有持续的后台请求（广告、统计、推荐等），永远无法达到 `networkidle` 状态
+
+**解决方案**：
+1. 如果 Cookie 文件存在且较新，直接跳过登录检查
+2. 使用 `wait_until="domcontentloaded"` 或 `wait_until="load"` 替代 `networkidle`
+3. 优先使用 `ToutiaoClient` 直接调用，而非通过脚本的 `ensure_login()`
+
+**修复代码示例**：
+```python
+# 跳过登录检查，直接使用已保存的 Cookie
+client = ToutiaoClient()
+await client.start()  # 自动加载 data/cookies.json
+# 执行操作...
+```
+
+### 2026-02-15: Windows 终端编码问题
+
+**问题描述**：
+- Windows 终端不支持 emoji 显示
+- Python 脚本中包含中文可能导致乱码
+
+**解决方案**：
+1. 临时脚本禁止使用 emoji，使用文字替代
+2. 脚本头部添加 `# -*- coding: utf-8 -*-`
+3. 使用英文输出日志，中文仅用于数据内容
+
+---
+
 ## 编码注意事项
 
 **临时脚本编码规范**：
 1. **禁止使用 emoji**：临时写的脚本中不允许使用 emoji（如 [成功]、[失败] 等），Windows 终端可能不支持显示导致编码错误。使用文字替代。
+2. **添加编码声明**：脚本头部添加 `# -*- coding: utf-8 -*-`
+3. **日志使用英文**：输出日志使用英文，避免中文乱码
 
 ---
 
