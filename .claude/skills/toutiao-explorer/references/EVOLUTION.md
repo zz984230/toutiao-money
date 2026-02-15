@@ -4,14 +4,77 @@
 
 ## 进化统计
 
-- 总进化次数: 10
-- 成功解决问题: 10
+- 总进化次数: 11
+- 成功解决问题: 11
 - 新增活动模式: 2
-- 上次进化: 2026-02-13
+- 上次进化: 2026-02-15
 
 ---
 
 ## 最近进化
+
+### [E011] 2026-02-15 - 活动页面弹窗与编辑器操作模式
+
+**触发**: 用户参与"上头条 聊热点"活动
+
+**问题**:
+1. 活动页面弹出888元奖励弹窗，**没有关闭按钮**，遮挡页面操作
+2. 微头条发布页面右侧"发文助手"抽屉遮挡编辑区域，点击失败
+3. ProseMirror 编辑器需要特殊操作方式才能正确填充内容
+
+**分析**:
+- **奖励弹窗特性**：
+  - 弹窗是活动流程的一部分，不是广告
+  - 显示"888元"奖励金额和开奖时间
+  - 底部有"发文领取"按钮
+  - **没有**常规的关闭按钮（×）
+- **发文助手抽屉**：
+  - 使用 `.byte-drawer-mask` 遮罩层
+  - 遮罩层会拦截所有点击事件
+  - 需要先关闭抽屉才能操作编辑器
+- **ProseMirror 编辑器**：
+  - 编辑器类名：`ProseMirror`
+  - 需要先聚焦 → 全选现有内容 → 输入新内容
+  - 直接填充 innerHTML 可能不触发输入事件
+
+**解决方案**:
+1. **奖励弹窗处理**：
+   ```javascript
+   // 点击"发文领取"按钮继续（是流程的一部分）
+   document.querySelector('.mupload-btn')?.click()
+   // 或使用 playwright-cli
+   playwright-cli eval "document.querySelector('.mupload-btn')?.click()"
+   ```
+
+2. **关闭发文助手抽屉**：
+   ```javascript
+   // 点击遮罩层关闭抽屉
+   document.querySelector('.byte-drawer-mask')?.click()
+   // 或直接移除抽屉元素
+   document.querySelector('.publish-assistant-old-drawer')?.remove()
+   ```
+
+3. **ProseMirror 编辑器操作流程**：
+   ```bash
+   # 1. 聚焦编辑器
+   playwright-cli eval "document.querySelector('[contenteditable=true]').focus()"
+
+   # 2. 全选现有内容
+   playwright-cli press "Control+a"
+
+   # 3. 输入新内容
+   playwright-cli type "微头条内容..."
+   ```
+
+4. **发布验证**：
+   - 发布后切换回活动页面
+   - 刷新页面查看任务进度是否更新
+   - 进度从 (0/1) 变为 (1/1) 表示成功
+
+**验证状态**: ✅ 已验证成功
+**技能同步**: 建议同步 PATTERNS.md（弹窗处理模式）
+
+---
 
 ### [E010] 2026-02-13 - 话题标签格式错误：空格缺失导致活动未识别
 
